@@ -1,0 +1,22 @@
+/**
+ * Каталог эффектов. Новый эффект: файл в этой папке + строка здесь.
+ * Ползунки, превью и экспорт построятся из его описания сами.
+ */
+import { aurora } from './aurora'
+import { clouds } from './clouds'
+import { imageDistort } from './image-distort'
+import { lava } from './lava'
+import { noise } from './noise'
+import { plasma } from './plasma'
+import { space } from './space'
+import { tilt } from './tilt'
+import type { Category, EffectDef } from './types'
+import { waves } from './waves'
+
+export const EFFECTS: EffectDef[] = [noise, lava, waves, clouds, space, aurora, plasma, imageDistort, tilt]
+
+export const CATEGORIES: Category[] = ['Фоны', 'Изображения', 'Без WebGL']
+
+export const effectById = (id: string) => EFFECTS.find((e) => e.id === id)
+
+export type { EffectDef } from './types'

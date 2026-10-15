@@ -1,0 +1,144 @@
+/* Общие токены и сброс — для Студии и сайта. */
+:root {
+  --bg: #08080d;
+  --surface: #11111a;
+  --surface-2: #181824;
+  --line: rgba(255, 255, 255, 0.08);
+  --line-strong: rgba(255, 255, 255, 0.16);
+  --text: #ececf4;
+  --muted: #9a9ab0;
+  --accent: #a78bfa;
+  --accent-2: #22d3ee;
+  --accent-3: #ff6b9d;
+  --gradient: linear-gradient(120deg, var(--accent-3), var(--accent) 50%, var(--accent-2));
+  --radius: 14px;
+  --font: 'Onest Variable', system-ui, sans-serif;
+  --mono: 'JetBrains Mono Variable', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.55 var(--font);
+  -webkit-font-smoothing: antialiased;
+}
+
+img,
+canvas {
+  display: block;
+  max-width: 100%;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+a {
+  color: inherit;
+}
+
+button,
+input {
+  font: inherit;
+  color: inherit;
+}
+
+/* У code и pre в браузере свой шрифт «monospace» — заменяем на наш. */
+code,
+pre {
+  font-family: var(--mono);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent-2);
+  outline-offset: 2px;
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 38px;
+  padding: 0 16px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--surface-2);
+  cursor: pointer;
+  font-weight: 500;
+  white-space: nowrap;
+  text-decoration: none;
+  transition:
+    background 0.2s,
+    border-color 0.2s,
+    transform 0.2s;
+}
+
+.button:hover {
+  border-color: rgba(255, 255, 255, 0.3);
+  background: #222232;
+}
+
+.button:active {
+  transform: scale(0.97);
+}
+
+.button--primary {
+  border-color: transparent;
+  background: var(--gradient);
+  color: #0b0b12;
+  font-weight: 650;
+}
+
+.button--primary:hover {
+  border-color: transparent;
+  background: var(--gradient);
+  filter: brightness(1.1);
+}
+
+.button--small {
+  min-height: 32px;
+  padding: 0 12px;
+  font-size: 13px;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  text-decoration: none;
+}
+
+.brand__mark {
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  background: var(--gradient);
+  box-shadow: 0 0 18px rgba(167, 139, 250, 0.5);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}

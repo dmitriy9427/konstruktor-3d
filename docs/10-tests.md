@@ -1,0 +1,106 @@
+# 10. Тесты
+
+**Зачем:** шейдеры ломаются тихо — чёрный экран и строчка в консоли. Тесты ловят это до деплоя.
+
+```bash
+npm test       # Vitest — логика без браузера
+npm run e2e    # Playwright — настоящий браузер и видеокарта
+npm run check  # линтер + типы + Vitest + сборка
+```
+
+## Vitest: `src/engine/*.test.ts`
+
+### `params.test.ts`
+
+| Тест | Что ловит |
+| --- | --- |
+| `sanitize` | Число зажимается в диапазон, `'FFF'` → `#ffffff`, мусор → умолчание |
+| Адрес туда-обратно | `toSearch` → `fromSearch` возвращает те же значения — ссылка «Поделиться» не теряет настройки |
+| Кривой адрес | Неизвестный эффект и `speed=999` не ломают Студию |
+| Только отличия | Без изменений адрес — просто `?e=lava` |
+| `randomValues` | Для **каждого** эффекта «Случайно» даёт допустимые значения (генератор с зерном — тест повторяем) |
+| Каталог | Уникальные `id`; пресеты ссылаются только на существующие параметры |
+
+### `codegen.test.ts` — экспорт как настоящий код
+
+Самая ценная проверка: сгенерированный `effect.js` **записывается во временный файл и
+импортируется**:
+
+```ts
+const [file] = generate(effect, values, DEFAULT_COMMON, { format: 'module', lazy: false })
+writeFileSync(join(dir, 'noise.mjs'), file.code)
+const mod = await import(pathToFileURL(file).href)
+expect(typeof mod.mount).toBe('function')
+```
+
+Если склейка рантайма и настроек дала синтаксическую ошибку — тест упадёт. В Node нет WebGL,
+но он и не нужен: `mount` вызывается только в браузере, а модуль должен хотя бы разобраться.
+
+Ещё: в файл попали ваши значения и ссылка; у каждого формата нужный набор файлов; ленивая
+загрузка — через `import()`; веб-компонент регистрирует `k3d-<id>`.
+
+## Playwright: `e2e/studio.spec.ts`
+
+### Каждый эффект рисует не пустой кадр
+
+```ts
+for (const effect of EFFECTS) {
+  test(`эффект «${effect.name}» рисуется без ошибок`, async ({ page }) => {
+    await page.goto(`studio.html?e=${effect.id}`)
+    await expect(page.locator('.preview__error')).toHaveCount(0)   // шейдер скомпилировался
+    const stats = await canvasStats(page, '.preview__canvas')
+    expect(stats.mean).toBeGreaterThan(2)                          // не чёрный
+    expect(stats.spread).toBeGreaterThan(1)                        // есть рисунок, а не заливка
+    expect(errors).toEqual([])                                      // в консоли чисто
+  })
+}
+```
+
+**Почему не `drawImage(canvas)`.** Хочется просто прочитать пиксели холста. Но WebGL по
+умолчанию **очищает** буфер кадра после показа на экране (`preserveDrawingBuffer: false` —
+так быстрее), и `drawImage` получает чёрную картинку. Включать `preserveDrawingBuffer` ради
+теста — значит тестировать не то, что уйдёт пользователям. Поэтому делаем **скриншот
+элемента** и считаем яркость и разброс по нему:
+
+```ts
+const png = await page.locator(selector).screenshot()
+// в браузере: createImageBitmap(png) → OffscreenCanvas 64×64 → getImageData → среднее и разброс
+```
+
+### Экспорт работает на чистой странице
+
+Тест открывает «Забрать код», берёт текст `effect.js` из ящика, открывает **пустую** страницу и
+подключает модуль через `Blob`-адрес — как отдельный файл:
+
+```ts
+const url = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }))
+const { mount } = await import(url)
+mount(document.querySelector('#hero-bg'))
+```
+
+Дальше — та же проверка «не пустой кадр». Это главное обещание проекта, проверенное
+автоматически: код из Студии работает без Студии.
+
+### Студия
+
+Пресет меняет адрес, «Забрать код» открывается, переключение на React показывает `Effect.tsx`,
+`Escape` закрывает ящик.
+
+## WebGL в CI
+
+На серверах GitHub Actions нет видеокарты. Chromium там рисует WebGL **программно** —
+SwiftShader:
+
+```ts
+launchOptions: process.env.CI ? { args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] } : {},
+```
+
+Медленнее, но шейдеры компилируются тем же компилятором (ANGLE), и ошибки ловятся те же.
+Локально тесты идут в установленном Chrome (`channel: 'chrome'`) с настоящей видеокартой.
+
+## Что не покрыто тестами (и почему)
+
+- **Красота.** Тест знает, что кадр не пустой, но не знает, что он красивый. Для этого —
+  скриншоты (`node scripts/screenshots.mjs`) и глаза.
+- **Точные пиксели.** Анимация, разные видеокарты и драйверы — сравнение «пиксель в пиксель»
+  дало бы ложные падения.
