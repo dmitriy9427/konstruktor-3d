@@ -40,10 +40,12 @@ src/
 ├─ runtime/            ← то, что попадает в ваш проект
 │  ├─ runtime.js       рантайм шейдерных эффектов и слайдов (без import — самодостаточный)
 │  ├─ transition.js    переходы между секциями: прожигание, растворение, шторка
+│  ├─ scene.js         рантайм 3D-сцен на three.js
+│  ├─ three/           3D-эффекты: galaxy, swarm, morph, text-particles, glass
 │  └─ tilt.js          наклон карточки на CSS
 ├─ effects/            ← каталог: каждый эффект — данные (шейдер + параметры + пресеты)
 │  ├─ noise.ts  lava.ts  waves.ts  clouds.ts  space.ts  aurora.ts  plasma.ts
-│  ├─ image-distort.ts  slides.ts  transitions.ts  tilt.ts
+│  ├─ image-distort.ts  slides.ts  transitions.ts  three.ts  tilt.ts
 │  └─ index.ts         список эффектов и категорий
 ├─ engine/             ← логика без интерфейса
 │  ├─ params.ts        проверка значений, «Случайно», запись в адрес

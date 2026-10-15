@@ -26,6 +26,15 @@ function ParamInput({ name, param, value, onChange }: { name: string; param: Par
       return <ColorField id={id} label={param.label} value={String(value)} onChange={onChange} />
     case 'boolean':
       return <Toggle id={id} label={param.label} checked={Boolean(value)} onChange={onChange} />
+    case 'text':
+      return (
+        <div className="control">
+          <label className="control__label" htmlFor={id}>
+            {param.label}
+          </label>
+          <input id={id} className="text-field" value={String(value)} maxLength={param.maxLength ?? 40} spellCheck={false} onChange={(e) => onChange(e.currentTarget.value)} />
+        </div>
+      )
     case 'select':
       return (
         <fieldset className="control control--segmented" data-param={name}>
@@ -120,21 +129,23 @@ const POST_LABELS: Record<keyof PostOptions, string> = {
 }
 
 /** Общие настройки: мышь, качество, постобработка. */
-export function CommonControls({ common, onChange, usesMouse, shader }: { common: Common; onChange: (c: Common) => void; usesMouse: boolean; shader: boolean }) {
+export function CommonControls({ common, onChange, usesMouse, shader, quality }: { common: Common; onChange: (c: Common) => void; usesMouse: boolean; shader: boolean; quality: boolean }) {
   const id = useId()
   return (
     <>
       {usesMouse && (
         <>
           <Toggle id={`${id}-mouse`} label="Следовать за мышью" checked={common.mouse} onChange={(mouse) => onChange({ ...common, mouse })} />
-          {common.mouse && shader && (
+          {common.mouse && quality && (
             <Range id={`${id}-inertia`} label="Инерция мыши" min={0} max={0.6} step={0.01} value={common.inertia} onChange={(inertia) => onChange({ ...common, inertia })} />
           )}
         </>
       )}
+      {quality && (
+        <Range id={`${id}-quality`} label="Качество (плотность пикселей)" min={0.5} max={2} step={0.05} value={common.quality} onChange={(quality) => onChange({ ...common, quality })} />
+      )}
       {shader && (
         <>
-          <Range id={`${id}-quality`} label="Качество (плотность пикселей)" min={0.5} max={2} step={0.05} value={common.quality} onChange={(quality) => onChange({ ...common, quality })} />
           <h3 className="panel__subtitle">Постобработка</h3>
           {(Object.keys(POST_LABELS) as (keyof PostOptions)[]).map((key) => (
             <Range

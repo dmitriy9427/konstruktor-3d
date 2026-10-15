@@ -42,6 +42,10 @@ export function sanitize(param: Param, value: unknown): Values[string] {
       return value === true || value === 'true' || value === '1' || value === 1
     case 'select':
       return param.options.some((o) => o.value === value) ? String(value) : param.default
+    case 'text': {
+      const s = String(value ?? '').slice(0, param.maxLength ?? 40)
+      return s.trim() ? s : param.default
+    }
   }
 }
 
@@ -106,7 +110,8 @@ export function randomValues(params: Params, current: Values, random = Math.rand
 export function toSearch(effectId: string, params: Params, values: Values, common: Common) {
   const p = new URLSearchParams({ e: effectId })
   for (const [key, value] of Object.entries(changedValues(params, values))) {
-    p.set(key, typeof value === 'string' ? value.replace('#', '') : typeof value === 'boolean' ? (value ? '1' : '0') : String(value))
+    const color = params[key].type === 'color'
+    p.set(key, color ? String(value).replace('#', '') : typeof value === 'boolean' ? (value ? '1' : '0') : String(value))
   }
   if (common.mouse !== DEFAULT_COMMON.mouse) p.set('_mouse', common.mouse ? '1' : '0')
   if (common.inertia !== DEFAULT_COMMON.inertia) p.set('_inertia', String(common.inertia))

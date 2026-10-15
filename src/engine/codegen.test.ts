@@ -2,8 +2,7 @@
  * Экспорт: сгенерированный модуль — это настоящий JS. Проверяем, что он
  * разбирается и импортируется (в Node, без браузера) и что в нём наши значения.
  */
-import { mkdtempSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'
@@ -12,7 +11,9 @@ import { EFFECTS, effectById } from '../effects'
 import { generate, type ExportFormat } from './codegen'
 import { DEFAULT_COMMON, resolveValues } from './params'
 
-const dir = mkdtempSync(join(tmpdir(), 'k3d-'))
+// Файлы — внутри проекта: так import 'three' в 3D-эффектах найдёт node_modules.
+mkdirSync(join(process.cwd(), 'node_modules/.k3d-test'), { recursive: true })
+const dir = mkdtempSync(join(process.cwd(), 'node_modules/.k3d-test/run-'))
 
 async function importModule(name: string, code: string) {
   const file = join(dir, name)
@@ -74,6 +75,15 @@ describe('generate', () => {
     expect(html.code).toContain('slider.next()')
     const [component] = generate(slides, resolveValues(slides.params), DEFAULT_COMMON, { format: 'react', lazy: false })
     expect(component.name).toBe('Slider.tsx')
+  })
+
+  it('3D: импорт three, import map в сниппете, имя функции эффекта в mount', () => {
+    const glass = effectById('glass')!
+    const [js, html] = generate(glass, resolveValues(glass.params), DEFAULT_COMMON, { format: 'module', lazy: false })
+    expect(js.code).toContain("import * as THREE from 'three'")
+    expect(js.code).toContain("import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js'")
+    expect(js.code).toContain('createScene(THREE, canvas, glass,')
+    expect(html.code).toContain('"three": "https://cdn.jsdelivr.net/npm/three@')
   })
 
   it('веб-компонент регистрирует тег k3d-<id>', () => {

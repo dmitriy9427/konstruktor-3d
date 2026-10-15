@@ -18,6 +18,18 @@ import runtimeSource from '../runtime/runtime.js?raw'
 // oxlint-disable-next-line import/default
 import tiltSource from '../runtime/tilt.js?raw'
 // oxlint-disable-next-line import/default
+import sceneSource from '../runtime/scene.js?raw'
+// oxlint-disable-next-line import/default
+import galaxySource from '../runtime/three/galaxy.js?raw'
+// oxlint-disable-next-line import/default
+import glassSource from '../runtime/three/glass.js?raw'
+// oxlint-disable-next-line import/default
+import morphSource from '../runtime/three/morph.js?raw'
+// oxlint-disable-next-line import/default
+import swarmSource from '../runtime/three/swarm.js?raw'
+// oxlint-disable-next-line import/default
+import textParticlesSource from '../runtime/three/text-particles.js?raw'
+// oxlint-disable-next-line import/default
 import transitionSource from '../runtime/transition.js?raw'
 import type { Values } from '../runtime/runtime'
 import type { EffectDef } from '../effects/types'
@@ -131,6 +143,78 @@ ${
   effect.destroy = () => {
     destroyEffect()
     if (canvas !== target) canvas.remove()
+  }
+  return effect
+}
+`
+}
+
+/** Текст файлов 3D-эффектов по имени функции (EffectDef.setupName). */
+const SCENE_SOURCES: Record<string, string> = {
+  galaxy: galaxySource,
+  glass: glassSource,
+  morph: morphSource,
+  swarm: swarmSource,
+  textParticles: textParticlesSource,
+}
+
+/** Версия three.js, с которой проверена Студия (для import map и npm i). */
+export const THREE_VERSION = __THREE_VERSION__
+
+/** Import map: для страниц без сборщика three берётся с CDN. */
+export const importMap = () => `<!-- three.js с CDN (для страниц без сборщика; с Vite/webpack — npm i three@${THREE_VERSION}) -->
+<script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@${THREE_VERSION}/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@${THREE_VERSION}/examples/jsm/"
+    }
+  }
+</script>`
+
+function sceneModule(effect: EffectDef, values: Values, common: Common, link?: string) {
+  const room = effect.addons?.includes('RoomEnvironment')
+  return `${header(effect, link)}
+// Нужен three.js ${THREE_VERSION}: npm i three@${THREE_VERSION} — или import map из index.html.
+import * as THREE from 'three'
+${room ? "import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js'\n" : ''}
+${sceneSource.trim()}
+
+${SCENE_SOURCES[effect.setupName!].trim()}
+
+const VALUES = ${json(values)}
+
+const OPTIONS = ${json({ mouse: common.mouse, inertia: common.inertia, quality: common.quality })}
+
+/**
+ * Запустить 3D-эффект в элементе: холст растянется на него целиком.
+ * @param {HTMLElement} target
+ * @param {object} [options] — { mouse: false, quality: 1 }
+ * @returns {{ set(values): void, progress(p: number | null): void, play(): void, pause(): void, destroy(): void }}
+ */
+export function mount(target, options = {}) {
+  const canvas = document.createElement('canvas')
+  canvas.setAttribute('aria-hidden', 'true')
+  Object.assign(canvas.style, { position: 'absolute', inset: '0', width: '100%', height: '100%', display: 'block' })
+  if (getComputedStyle(target).position === 'static') target.style.position = 'relative'
+  target.append(canvas)
+  let effect
+  try {
+    effect = createScene(THREE, canvas, ${effect.setupName}, { name: ${JSON.stringify(effect.name)}, values: VALUES }, {
+      ...OPTIONS,
+      ...options,
+      addons: { ${room ? 'RoomEnvironment' : ''} },
+    })
+  } catch (error) {
+    console.warn('[3D-конструктор]', error)
+    canvas.remove()
+    return { destroy() {}, set() {}, setOptions() {}, progress() {}, play() {}, pause() {} }
+  }
+  canvas.animate?.([{ opacity: 0 }, { opacity: 1 }], { duration: 800, easing: 'ease-out' })
+  const destroyEffect = effect.destroy
+  effect.destroy = () => {
+    destroyEffect()
+    canvas.remove()
   }
   return effect
 }
@@ -378,14 +462,16 @@ ${script}
 function usageHtml(effect: EffectDef, options: ExportOptions, values: Values) {
   if (effect.kind === 'transition') return transitionUsage(effect, options, values)
   if (effect.kind === 'slides') return slidesUsage(effect, options)
-  const firstColor = Object.keys(effect.params).find((key) => effect.params[key].type === 'color')
+  // Заглушка — цвет фона эффекта (если он есть), иначе первый цвет.
+  const firstColor = 'background' in effect.params ? 'background' : Object.keys(effect.params).find((key) => effect.params[key].type === 'color')
   const placeholder = firstColor ? String(values[firstColor]) : '#000'
+  const map = effect.kind === 'three' ? `${importMap()}\n\n` : ''
   const isImage = effect.kind === 'image'
   const isCss = effect.kind === 'css'
   const tag = elementTag(effect)
   if (options.format === 'element') {
     const inner = isImage ? '\n  <img src="photo.jpg" alt="Описание фото" width="1200" height="800">\n' : ''
-    return `<!-- Подключить один раз -->
+    return `${map}<!-- Подключить один раз -->
 <script type="module" src="./effect.js"></script>
 
 <!-- Вставить, где нужен эффект. Размер задаёт CSS. -->
@@ -420,7 +506,7 @@ function usageHtml(effect: EffectDef, options: ExportOptions, values: Values) {
   import { mount } from './effect.js'
   mount(${selector})
 </script>`
-  return `${target}
+  return `${map}${target}
 ${css}
 ${script}
 `
@@ -594,7 +680,7 @@ function reactComponent(effect: EffectDef, options: ExportOptions) {
   return `/**
  * ${effect.name} — React-компонент из 3D-конструктора.
  *   <Effect className="hero-bg" />${isImage ? '\n *   <Effect src="/photo.jpg" alt="…" />' : ''}${isCss ? '\n *   <Effect><h3>Карточка</h3></Effect>' : ''}
- * StrictMode безопасен: эффект корректно уничтожается и создаётся заново.
+ * StrictMode безопасен: эффект корректно уничтожается и создаётся заново.${effect.kind === 'three' ? `\n * Нужен three.js: npm i three@${THREE_VERSION}` : ''}
  */
 import { useEffect, useRef${isCss ? ', type ReactNode' : ''} } from 'react'
 ${options.lazy ? '' : "import { mount } from './effect.js'\n"}
@@ -621,6 +707,8 @@ export function generate(effect: EffectDef, values: Values, common: Common, opti
   const base =
     effect.kind === 'css'
       ? tiltModule(effect, values, options.link)
+      : effect.kind === 'three'
+        ? sceneModule(effect, values, common, options.link)
       : effect.kind === 'transition'
         ? transitionModule(effect, values, options.link)
         : shaderModule(effect, values, common, options.link)

@@ -12,6 +12,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { EffectDef } from '../effects/types'
 import type { Common } from '../engine/params'
 import { createEffect, type EffectInstance, type Values } from '../runtime/runtime'
+import type { SceneInstance } from '../runtime/scene'
 import { createTilt, type TiltInstance } from '../runtime/tilt'
 import { createTransition, type TransitionInstance, type TransitionTrigger } from '../runtime/transition'
 
@@ -21,6 +22,7 @@ export function Preview(props: Props) {
   if (props.effect.kind === 'css') return <TiltPreview {...props} />
   if (props.effect.kind === 'transition') return <TransitionPreview {...props} />
   if (props.effect.kind === 'slides') return <SlidesPreview key={props.effect.id} {...props} />
+  if (props.effect.kind === 'three') return <ScenePreview key={props.effect.id} {...props} />
   return <ShaderPreview key={props.effect.id} {...props} />
 }
 
@@ -240,6 +242,66 @@ function SlidesPreview({ effect, values, common, image }: Props) {
           →
         </button>
       </div>
+      {error && <p className="preview__error">{error}</p>}
+    </div>
+  )
+}
+
+/**
+ * Превью 3D: three.js (≈ 170 КБ gzip) скачивается, только когда выбран
+ * 3D-эффект, — остальная Студия его не грузит. Пока грузится — подпись.
+ */
+function ScenePreview({ effect, values, common }: Props) {
+  const host = useRef<HTMLDivElement>(null)
+  const instance = useRef<SceneInstance | null>(null)
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(true)
+  const latest = useRef({ values, common })
+  useLayoutEffect(() => {
+    latest.current = { values, common }
+  })
+
+  useEffect(() => {
+    let cancelled = false
+    let canvas: HTMLCanvasElement | null = null
+    void (async () => {
+      const [THREE, { createScene }, room] = await Promise.all([
+        import('three'),
+        import('../runtime/scene.js'),
+        effect.addons?.includes('RoomEnvironment') ? import('three/addons/environments/RoomEnvironment.js') : null,
+      ])
+      if (cancelled || !host.current) return
+      canvas = document.createElement('canvas')
+      canvas.className = 'preview__canvas'
+      host.current.append(canvas)
+      try {
+        const { values: v, common: c } = latest.current
+        instance.current = createScene(THREE, canvas, effect.setup!, { name: effect.name, values: v }, {
+          mouse: c.mouse,
+          inertia: c.inertia,
+          quality: c.quality,
+          reducedMotion: false,
+          addons: room ? { RoomEnvironment: room.RoomEnvironment } : {},
+        })
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e))
+      }
+      setLoading(false)
+    })()
+    return () => {
+      cancelled = true
+      instance.current?.destroy()
+      instance.current = null
+      canvas?.remove()
+    }
+  }, [effect])
+
+  useEffect(() => instance.current?.set(values), [values])
+  useEffect(() => instance.current?.setOptions({ mouse: common.mouse, inertia: common.inertia, quality: common.quality }), [common])
+
+  return (
+    <div ref={host} className="preview" role="img" aria-label={`Превью: ${effect.name}`}>
+      {loading && <p className="preview__loading">Загружаю three.js…</p>}
       {error && <p className="preview__error">{error}</p>}
     </div>
   )

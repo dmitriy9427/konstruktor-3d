@@ -5,6 +5,9 @@
  */
 import type { Params, Values } from '../runtime/runtime'
 
+/** Контекст 3D-эффекта (см. src/runtime/scene.js). */
+export type SceneSetup = (ctx: never) => unknown
+
 export type EffectKind =
   /** Полноэкранный шейдер: фоны, шум, лава, космос. */
   | 'quad'
@@ -14,10 +17,12 @@ export type EffectKind =
   | 'css'
   /** Слайдер: несколько картинок и шейдерный переход между ними. */
   | 'slides'
+  /** 3D-сцена на three.js: частицы, стекло. */
+  | 'three'
   /** Переход между секциями: SVG-фильтр поверх настоящей секции. */
   | 'transition'
 
-export type Category = 'Фоны' | 'Изображения' | 'Переходы' | 'Без WebGL'
+export type Category = 'Фоны' | 'Изображения' | 'Переходы' | '3D' | 'Без WebGL'
 
 export type EffectDef = {
   id: string
@@ -31,6 +36,10 @@ export type EffectDef = {
   params: Params
   /** Готовые наборы значений: «Закат», «Неон»… */
   presets?: { name: string; values: Values }[]
+  /** 3D: функция-эффект из src/runtime/three/, её имя (по нему экспорт берёт текст файла) и нужные дополнения three. */
+  setup?: SceneSetup
+  setupName?: string
+  addons?: ('RoomEnvironment')[]
   /** Использует ли эффект мышь (иначе переключатель «за мышью» скрыт). */
   usesMouse?: boolean
 }

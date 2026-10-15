@@ -10,7 +10,8 @@ export type SelectParam = {
   default: string
   hint?: string
 }
-export type Param = NumberParam | ColorParam | BooleanParam | SelectParam
+export type TextParam = { type: 'text'; label: string; default: string; maxLength?: number; hint?: string }
+export type Param = NumberParam | ColorParam | BooleanParam | SelectParam | TextParam
 export type Params = Record<string, Param>
 export type Values = Record<string, number | string | boolean>
 

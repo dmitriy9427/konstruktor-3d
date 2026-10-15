@@ -63,7 +63,8 @@ export function App() {
   }
 
   const shader = effect.kind === 'quad' || effect.kind === 'image' || effect.kind === 'slides'
-  const hasCommon = shader || Boolean(effect.usesMouse)
+  const is3d = effect.kind === 'three'
+  const hasCommon = shader || is3d || Boolean(effect.usesMouse)
 
   return (
     <div className="studio">
@@ -156,7 +157,7 @@ export function App() {
         )}
 
         {hasCommon && <h3 className="panel__subtitle">Общие</h3>}
-        <CommonControls common={common} onChange={setCommon} usesMouse={effect.usesMouse ?? false} shader={shader} />
+        <CommonControls common={common} onChange={setCommon} usesMouse={effect.usesMouse ?? false} shader={shader} quality={shader || is3d} />
       </aside>
 
       {codeOpen && <CodeDrawer effect={effect} values={values} common={common} link={link} onClose={closeCode} />}

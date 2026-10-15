@@ -57,6 +57,8 @@ await shot('studio-slides', {
   },
   settle: false,
 })
+await shot('studio-galaxy', { path: '/studio.html?e=galaxy', steps: (p) => p.waitForTimeout(1500) })
+await shot('studio-glass', { path: '/studio.html?e=glass', steps: (p) => p.waitForTimeout(1500) })
 await shot('studio-tilt', { path: '/studio.html?e=tilt', steps: (p) => hover(p, '.tilt-card') })
 await shot('code', { path: '/studio.html?e=noise', steps: (p) => p.getByRole('button', { name: 'Забрать код' }).click() })
 await shot('mobile', { path: '/studio.html?e=aurora', width: 390, height: 844, mobile: true })

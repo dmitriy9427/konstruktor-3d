@@ -123,6 +123,7 @@ export function uniformValue(param, value) {
 /** Собрать полный текст фрагментного шейдера эффекта. */
 export function buildFragment(spec) {
   const decls = Object.entries(spec.params)
+    .filter(([, param]) => param.type !== 'text')
     .map(([key, param]) => `uniform ${glslType(param)} ${uniformName(key)};`)
     .join('\n')
   const image = spec.image ? 'uniform sampler2D uImage;\nuniform vec2 uImageRes;\n' : ''
@@ -407,6 +408,7 @@ export function createEffect(canvas, spec, options = {}) {
     gl.uniform1f(main.loc('uHover'), pointer.hover)
     gl.uniform1f(main.loc('uScroll'), scrollProgress())
     for (const [key, param] of Object.entries(spec.params)) {
+      if (param.type === 'text') continue
       const value = uniformValue(param, values[key])
       if (Array.isArray(value)) gl.uniform3fv(main.loc(uniformName(key)), value)
       else gl.uniform1f(main.loc(uniformName(key)), value)

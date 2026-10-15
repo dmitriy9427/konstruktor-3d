@@ -4,6 +4,8 @@
  */
 import { expect, test, type Page } from '@playwright/test'
 
+import { readFileSync } from 'node:fs'
+
 import { EFFECTS } from '../src/effects'
 
 /**
@@ -53,6 +55,8 @@ for (const effect of EFFECTS) {
       await expect(cover).toHaveCSS('visibility', 'visible')
     } else if (effect.kind !== 'css') {
       const selector = effect.kind === 'image' ? '.photo__canvas' : effect.kind === 'slides' ? '.slider__canvas' : '.preview__canvas'
+      // 3D: three.js грузится лениво — ждём холст.
+      await page.locator(selector).waitFor()
       await page.waitForTimeout(600)
       const stats = await canvasStats(page, selector)
       expect(stats.mean, 'холст не чёрный').toBeGreaterThan(2)
@@ -147,5 +151,32 @@ test('экспортированный слайдер листается на ч
     return [...ctx.getImageData(10, 10, 1, 1).data]
   }, png)
   expect(b).toBeGreaterThan(r)
+  expect(errors).toEqual([])
+})
+
+test('экспортированный 3D-эффект работает на чистой странице через import map', async ({ page }) => {
+  // CDN подменяем файлами из node_modules: тест не зависит от сети.
+  await page.route(/cdn\.jsdelivr\.net\/npm\/three@[^/]+\/(.+)$/, (route) => {
+    const path = /three@[^/]+\/(.+)$/.exec(route.request().url())![1]
+    route.fulfill({ contentType: 'text/javascript', body: readFileSync(`node_modules/three/${path}`) })
+  })
+  await page.goto('studio.html?e=galaxy&count=8000')
+  await page.getByRole('button', { name: 'Забрать код' }).click()
+  const dialog = page.getByRole('dialog')
+  const code = await dialog.locator('code').textContent()
+  await dialog.getByRole('tab', { name: 'index.html' }).click()
+  const html = (await dialog.locator('code').textContent())!
+  const map = /<script type="importmap">[\s\S]*?<\/script>/.exec(html)![0]
+  const errors: string[] = []
+  page.on('pageerror', (e) => errors.push(e.message))
+  await page.setContent(`${map}<div id="hero-bg" style="position:relative;width:400px;height:300px"></div>`)
+  await page.evaluate(async (source) => {
+    const url = URL.createObjectURL(new Blob([source!], { type: 'text/javascript' }))
+    const { mount } = await import(/* @vite-ignore */ url)
+    mount(document.querySelector('#hero-bg'))
+  }, code)
+  await page.waitForTimeout(800)
+  const stats = await canvasStats(page, '#hero-bg canvas')
+  expect(stats.spread).toBeGreaterThan(1)
   expect(errors).toEqual([])
 })
