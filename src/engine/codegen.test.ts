@@ -52,6 +52,30 @@ describe('generate', () => {
     expect(files[1].code).toContain('IntersectionObserver')
   })
 
+  it('переход: модуль, сниппет для каждого запуска, React и веб-компонент', async () => {
+    const burn = effectById('burn')!
+    for (const trigger of ['scroll', 'appear', 'manual']) {
+      const values = resolveValues(burn.params, { trigger })
+      const [js, html] = generate(burn, values, DEFAULT_COMMON, { format: 'module', lazy: false })
+      expect(js.code).toContain('export function createTransition')
+      expect(html.code).toContain('#leaving')
+      if (trigger === 'scroll') expect(html.code).toContain('position: sticky')
+    }
+    const [component] = generate(burn, resolveValues(burn.params), DEFAULT_COMMON, { format: 'react', lazy: true })
+    expect(component.name).toBe('Transition.tsx')
+    const [element] = generate(burn, resolveValues(burn.params), DEFAULT_COMMON, { format: 'element', lazy: false })
+    expect(element.code).toContain("customElements.define('k3d-burn', Transition)")
+  })
+
+  it('слайды: все <img> блока становятся слайдами, есть Slider.tsx', () => {
+    const slides = effectById('slides')!
+    const [js, html] = generate(slides, resolveValues(slides.params), DEFAULT_COMMON, { format: 'module', lazy: true })
+    expect(js.code).toContain("target.querySelectorAll('img')")
+    expect(html.code).toContain('slider.next()')
+    const [component] = generate(slides, resolveValues(slides.params), DEFAULT_COMMON, { format: 'react', lazy: false })
+    expect(component.name).toBe('Slider.tsx')
+  })
+
   it('веб-компонент регистрирует тег k3d-<id>', () => {
     const [file] = generate(EFFECTS[0], resolveValues(EFFECTS[0].params), DEFAULT_COMMON, { format: 'element', lazy: true })
     expect(file.code).toContain(`customElements.define('k3d-${EFFECTS[0].id}'`)

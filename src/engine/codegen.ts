@@ -17,6 +17,8 @@
 import runtimeSource from '../runtime/runtime.js?raw'
 // oxlint-disable-next-line import/default
 import tiltSource from '../runtime/tilt.js?raw'
+// oxlint-disable-next-line import/default
+import transitionSource from '../runtime/transition.js?raw'
 import type { Values } from '../runtime/runtime'
 import type { EffectDef } from '../effects/types'
 import type { Common } from './params'
@@ -62,6 +64,7 @@ export const elementTag = (effect: EffectDef) => `k3d-${effect.id}`
 
 function shaderModule(effect: EffectDef, values: Values, common: Common, link?: string) {
   const isImage = effect.kind === 'image'
+  const isSlides = effect.kind === 'slides'
   return `${header(effect, link)}
 ${runtimeSource.trim()}
 
@@ -77,7 +80,10 @@ const OPTIONS = ${json({ mouse: common.mouse, inertia: common.inertia, quality: 
 /**
  * Запустить эффект в элементе.
 ${
-  isImage
+  isSlides
+    ? ` * Элемент — обёртка со слайдами <img> внутри. Управление: effect.next(),
+ * effect.prev(), effect.goTo(2), effect.index — номер текущего слайда.`
+    : isImage
     ? ` * Элемент — обёртка с <img> внутри: картинка остаётся в разметке (её видят
  * поисковики и браузер без WebGL), а холст ложится поверх неё.`
     : ` * Элемент — любой блок: холст растянется на него целиком (position: absolute).
@@ -100,7 +106,13 @@ ${
     ? `  const img = target.querySelector('img')
   const spec = { ...SPEC, image: img }
 `
-    : `  const spec = SPEC
+    : isSlides
+      ? `  // Слайды — все <img> внутри блока. Видна только первая (запасной вариант без WebGL).
+  const images = [...target.querySelectorAll('img')]
+  images.slice(1).forEach((img) => (img.hidden = true))
+  const spec = { ...SPEC, images }
+`
+      : `  const spec = SPEC
 `
 }  let effect
   try {
@@ -109,17 +121,18 @@ ${
     // Нет WebGL2 — убираем холст, остаётся то, что под ним (картинка или фон блока).
     console.warn('[3D-конструктор]', error)
     if (canvas !== target) canvas.remove()
-    return { destroy() {}, set() {}, setOptions() {} }
+    return { destroy() {}, set() {}, setOptions() {}, next() {}, prev() {}, goTo() {}, index: 0 }
   }
   // Холст появляется плавно — без вспышки на первом кадре.
   canvas.animate?.([{ opacity: 0 }, { opacity: 1 }], { duration: 600, easing: 'ease-out' })
-  return {
-    ...effect,
-    destroy() {
-      effect.destroy()
-      if (canvas !== target) canvas.remove()
-    },
+  // Возвращаем сам объект эффекта (не копию через «...»: копия потеряла бы
+  // геттеры вроде index), только destroy() заодно убирает наш холст.
+  const destroyEffect = effect.destroy
+  effect.destroy = () => {
+    destroyEffect()
+    if (canvas !== target) canvas.remove()
   }
+  return effect
 }
 `
 }
@@ -143,8 +156,54 @@ export function mount(target, overrides = {}) {
 `
 }
 
+function transitionModule(effect: EffectDef, values: Values, link?: string) {
+  return `${header(effect, link)}
+${transitionSource.trim()}
+
+const VALUES = ${json({ ...values, name: effect.name })}
+
+/**
+ * Запустить переход на секции.
+ * @param {HTMLElement | string} target — секция (или селектор), которая прогорит
+ * @param {object} [options] — { trigger: 'scroll' | 'appear' | 'manual', duration, once, onComplete, scroller, stack }
+ * @returns {{ play(): void, reverse(): void, progress(p: number): void, destroy(): void }}
+ */
+export function mount(target, options = {}) {
+  const el = typeof target === 'string' ? document.querySelector(target) : target
+  return createTransition(el, VALUES, options)
+}
+`
+}
+
 function elementWrapper(effect: EffectDef) {
   const tag = elementTag(effect)
+  if (effect.kind === 'transition') {
+    return `
+
+/**
+ * Веб-компонент: <${tag}>…</${tag}> — сам элемент и есть секция, которая прогорит.
+ * Атрибуты: trigger="scroll | appear | manual", duration="2", once.
+ * Из кода: document.querySelector('${tag}').play() / .reverse() / .progress(0.5)
+ */
+class Transition extends HTMLElement {
+  connectedCallback() {
+    if (getComputedStyle(this).display === 'inline') this.style.display = 'block'
+    const options = { once: this.hasAttribute('once') }
+    if (this.hasAttribute('trigger')) options.trigger = this.getAttribute('trigger')
+    if (this.hasAttribute('duration')) options.duration = Number(this.getAttribute('duration'))
+    this.instance = mount(this, options)
+  }
+  disconnectedCallback() {
+    this.instance?.destroy()
+    this.instance = null
+  }
+  play() { this.instance?.play() }
+  reverse() { this.instance?.reverse() }
+  progress(p) { this.instance?.progress(p) }
+}
+if (!customElements.get('${tag}')) customElements.define('${tag}', Transition)
+`
+  }
   return `
 
 /**
@@ -173,7 +232,152 @@ if (!customElements.get('${tag}')) customElements.define('${tag}', Effect)
 `
 }
 
+/** Разметка и CSS для перехода — своя для каждого способа запуска. */
+function transitionUsage(effect: EffectDef, options: ExportOptions, values: Values) {
+  const trigger = String(values.trigger)
+  const tag = elementTag(effect)
+  const load = options.lazy
+    ? (call: string) => `<script type="module">
+  // Ленивая загрузка: код перехода скачивается, когда секция подъезжает к экрану.
+  const target = document.querySelector('#leaving')
+  const observer = new IntersectionObserver(async ([entry]) => {
+    if (!entry.isIntersecting) return
+    observer.disconnect()
+    const { mount } = await import('./effect.js')
+    ${call}
+  }, { rootMargin: '50% 0px' })
+  observer.observe(target)
+</script>`
+    : (call: string) => `<script type="module">
+  import { mount } from './effect.js'
+  const target = document.querySelector('#leaving')
+  ${call}
+</script>`
+
+  if (trigger === 'scroll') {
+    const sections = options.format === 'element'
+      ? `  <${tag} id="leaving" class="stack__top">…первая секция…</${tag}>`
+      : `  <section id="leaving" class="stack__top">…первая секция…</section>`
+    return `<!--
+  «Липкий» стек: обе секции прилипают к верху экрана, первая лежит поверх.
+  Пока стек прокручивают (200vh), первая прогорает и открывает вторую.
+  Прокрутили назад — секция «зарастает» обратно.
+-->
+<div class="stack">
+${sections}
+  <section class="stack__under">…вторая секция…</section>
+</div>
+
+<style>
+  .stack { position: relative; height: 300vh; }        /* 100vh экрана + 200vh на переход */
+  .stack > * { position: sticky; top: 0; display: block; height: 100vh; }
+  .stack__top { z-index: 2; background: #f6f1e7; }    /* у секции должен быть свой фон */
+  .stack__under { z-index: 1; margin-top: -100vh; }
+</style>
+
+${options.format === 'element' ? `<script type="module" src="./effect.js"></script>` : load('mount(target)')}
+`
+  }
+
+  const cover = options.format === 'element'
+    ? `  <${tag} id="leaving" class="reveal__cover"${trigger === 'manual' ? ' trigger="manual"' : ''}>…обложка…</${tag}>`
+    : `  <div id="leaving" class="reveal__cover">…обложка…</div>`
+  const markup = `<!-- Обложка лежит поверх блока и сгорает, открывая его. -->
+<div class="reveal">
+  <div class="reveal__content">…то, что откроется…</div>
+${cover}
+</div>
+${trigger === 'manual' ? '<button id="burn-button">Сжечь</button>\n' : ''}
+<style>
+  .reveal { position: relative; min-height: 60vh; }
+  .reveal__cover { position: absolute; inset: 0; z-index: 1; display: block; background: #f6f1e7; }
+</style>
+`
+  if (options.format === 'element') return `${markup}\n<script type="module" src="./effect.js"></script>\n`
+  if (trigger === 'manual') {
+    return `${markup}
+${load(`const transition = mount(target)
+  document.querySelector('#burn-button').addEventListener('click', () => transition.play())
+  // transition.reverse() — вернуть, transition.progress(0.5) — остановить на середине`)}
+
+<!-- Связка с GSAP ScrollTrigger (вместо встроенной прокрутки):
+<script type="module">
+  import { mount } from './effect.js'
+  const transition = mount('#leaving', { trigger: 'manual' })
+  ScrollTrigger.create({ trigger: '.reveal', start: 'top top', end: '+=150%', pin: true, scrub: true,
+    onUpdate: (self) => transition.progress(self.progress) })
+</script>
+-->
+`
+  }
+  return `${markup}
+${load(`mount(target, { once: false })   // once: true — сгореть один раз`)}
+`
+}
+
+function slidesUsage(effect: EffectDef, options: ExportOptions) {
+  const tag = elementTag(effect)
+  const imgs = `    <img src="slide-1.jpg" alt="Первый слайд" width="1200" height="800">
+    <img src="slide-2.jpg" alt="Второй слайд" width="1200" height="800">
+    <img src="slide-3.jpg" alt="Третий слайд" width="1200" height="800">`
+  const css = `<style>
+  .slider { position: relative; overflow: hidden; border-radius: 16px; }
+  .slider img { display: block; width: 100%; height: auto; aspect-ratio: 3 / 2; object-fit: cover; }
+</style>`
+  if (options.format === 'element') {
+    return `<script type="module" src="./effect.js"></script>
+
+<${tag} id="slider" class="slider">
+${imgs}
+</${tag}>
+<button data-prev>←</button>
+<button data-next>→</button>
+
+${css}
+
+<script>
+  const slider = document.querySelector('#slider')
+  document.querySelector('[data-prev]').addEventListener('click', () => slider.instance?.prev())
+  document.querySelector('[data-next]').addEventListener('click', () => slider.instance?.next())
+</script>
+`
+  }
+  const start = `const slider = mount(target)
+  document.querySelector('[data-prev]').addEventListener('click', () => slider.prev())
+  document.querySelector('[data-next]').addEventListener('click', () => slider.next())`
+  const script = options.lazy
+    ? `<script type="module">
+  // Ленивая загрузка: код и текстуры — когда слайдер подъезжает к экрану.
+  const target = document.querySelector('#slider')
+  const observer = new IntersectionObserver(async ([entry]) => {
+    if (!entry.isIntersecting) return
+    observer.disconnect()
+    const { mount } = await import('./effect.js')
+    ${start.replace(/\n {2}/g, '\n    ')}
+  }, { rootMargin: '50% 0px' })
+  observer.observe(target)
+</script>`
+    : `<script type="module">
+  import { mount } from './effect.js'
+  const target = document.querySelector('#slider')
+  ${start}
+</script>`
+  return `<!-- Слайды — обычные <img>: без WebGL виден первый, поисковики видят все. -->
+<div id="slider" class="slider">
+${imgs}
+</div>
+<button data-prev>←</button>
+<button data-next>→</button>
+
+${css}
+
+${script}
+`
+}
+
 function usageHtml(effect: EffectDef, options: ExportOptions, values: Values) {
+  if (effect.kind === 'transition') return transitionUsage(effect, options, values)
+  if (effect.kind === 'slides') return slidesUsage(effect, options)
   const firstColor = Object.keys(effect.params).find((key) => effect.params[key].type === 'color')
   const placeholder = firstColor ? String(values[firstColor]) : '#000'
   const isImage = effect.kind === 'image'
@@ -222,7 +426,148 @@ ${script}
 `
 }
 
+function reactTransition(effect: EffectDef, options: ExportOptions) {
+  const mountLine = options.lazy
+    ? `    // Ленивая загрузка: код перехода скачивается, когда секция подъезжает к экрану.
+    let cancelled = false
+    const observer = new IntersectionObserver(
+      async ([entry]) => {
+        if (!entry.isIntersecting) return
+        observer.disconnect()
+        const { mount } = await import('./effect.js')
+        if (cancelled) return
+        instance.current = mount(el, { trigger })
+      },
+      { rootMargin: '50% 0px' },
+    )
+    observer.observe(el)
+    return () => {
+      cancelled = true
+      observer.disconnect()
+      instance.current?.destroy()
+      instance.current = null
+    }`
+    : `    instance.current = mount(el, { trigger })
+    return () => {
+      instance.current?.destroy()
+      instance.current = null
+    }`
+  return `/**
+ * ${effect.name} — React-компонент перехода из 3D-конструктора.
+ * Сам компонент — это секция, которая прогорит. Пример со скроллом:
+ *
+ *   <div className="stack">
+ *     <Transition className="stack__top">…первая секция…</Transition>
+ *     <section className="stack__under">…вторая…</section>
+ *   </div>
+ *
+ *   .stack { position: relative; height: 300vh; }
+ *   .stack > * { position: sticky; top: 0; height: 100vh; }
+ *   .stack__top { z-index: 2; background: #f6f1e7; }
+ *   .stack__under { z-index: 1; margin-top: -100vh; }
+ *
+ * Управление из кода: const ref = useRef<TransitionHandle>(null)
+ *   <Transition ref={ref} trigger="manual">…</Transition>;  ref.current?.play()
+ */
+import { useEffect, useImperativeHandle, useRef, type CSSProperties, type ReactNode, type Ref } from 'react'
+${options.lazy ? '' : "import { mount } from './effect.js'\n"}
+export type TransitionHandle = { play(): void; reverse(): void; progress(p: number): void }
+
+type Props = {
+  children?: ReactNode
+  className?: string
+  style?: CSSProperties
+  trigger?: 'scroll' | 'appear' | 'manual'
+  ref?: Ref<TransitionHandle>
+}
+
+export function Transition({ children, className, style, trigger, ref }: Props) {
+  const box = useRef<HTMLDivElement>(null)
+  const instance = useRef<(TransitionHandle & { destroy(): void }) | null>(null)
+  useImperativeHandle(ref, () => ({
+    play: () => instance.current?.play(),
+    reverse: () => instance.current?.reverse(),
+    progress: (p) => instance.current?.progress(p),
+  }))
+  useEffect(() => {
+    const el = box.current
+    if (!el) return
+${mountLine}
+  }, [trigger])
+  return (
+    <div ref={box} className={className} style={style}>
+      {children}
+    </div>
+  )
+}
+`
+}
+
+function reactSlides(effect: EffectDef, options: ExportOptions) {
+  const create = options.lazy
+    ? `    let cancelled = false
+    const observer = new IntersectionObserver(
+      async ([entry]) => {
+        if (!entry.isIntersecting) return
+        observer.disconnect()
+        const { mount } = await import('./effect.js')
+        if (!cancelled) instance.current = mount(el)
+      },
+      { rootMargin: '50% 0px' },
+    )
+    observer.observe(el)
+    return () => {
+      cancelled = true
+      observer.disconnect()
+      instance.current?.destroy()
+      instance.current = null
+    }`
+    : `    instance.current = mount(el)
+    return () => {
+      instance.current?.destroy()
+      instance.current = null
+    }`
+  return `/**
+ * ${effect.name} — React-слайдер из 3D-конструктора.
+ *   const ref = useRef<SliderHandle>(null)
+ *   <Slider ref={ref} slides={[{ src: '/1.jpg', alt: '…' }, { src: '/2.jpg', alt: '…' }]} />
+ *   <button onClick={() => ref.current?.next()}>→</button>
+ * Список слайдов меняется — слайдер пересоздаётся.
+ */
+import { useEffect, useImperativeHandle, useRef, type Ref } from 'react'
+${options.lazy ? '' : "import { mount } from './effect.js'\n"}
+export type SliderHandle = { next(): void; prev(): void; goTo(index: number): void }
+type Slide = { src: string; alt: string }
+type Instance = SliderHandle & { destroy(): void }
+
+export function Slider({ slides, className, ref }: { slides: Slide[]; className?: string; ref?: Ref<SliderHandle> }) {
+  const box = useRef<HTMLDivElement>(null)
+  const instance = useRef<Instance | null>(null)
+  useImperativeHandle(ref, () => ({
+    next: () => instance.current?.next(),
+    prev: () => instance.current?.prev(),
+    goTo: (i) => instance.current?.goTo(i),
+  }))
+  const key = slides.map((s) => s.src).join('|')
+  useEffect(() => {
+    const el = box.current
+    if (!el) return
+${create}
+  }, [key])
+  return (
+    <div ref={box} key={key} className={className} style={{ position: 'relative', overflow: 'hidden' }}>
+      {slides.map((s) => (
+        <img key={s.src} src={s.src} alt={s.alt} style={{ display: 'block', width: '100%', height: 'auto' }} />
+      ))}
+    </div>
+  )
+}
+`
+}
+
 function reactComponent(effect: EffectDef, options: ExportOptions) {
+  if (effect.kind === 'transition') return reactTransition(effect, options)
+  if (effect.kind === 'slides') return reactSlides(effect, options)
   const isImage = effect.kind === 'image'
   const isCss = effect.kind === 'css'
   const loader = options.lazy
@@ -273,13 +618,19 @@ ${loader}
 
 /** Собрать файлы экспорта и сниппет подключения. */
 export function generate(effect: EffectDef, values: Values, common: Common, options: ExportOptions): ExportFile[] {
-  const base = effect.kind === 'css' ? tiltModule(effect, values, options.link) : shaderModule(effect, values, common, options.link)
+  const base =
+    effect.kind === 'css'
+      ? tiltModule(effect, values, options.link)
+      : effect.kind === 'transition'
+        ? transitionModule(effect, values, options.link)
+        : shaderModule(effect, values, common, options.link)
   const files: ExportFile[] = []
   if (options.format === 'element') {
     files.push({ name: 'effect.js', language: 'js', code: base + elementWrapper(effect) })
     files.push({ name: 'index.html', language: 'html', code: usageHtml(effect, options, values) })
   } else if (options.format === 'react') {
-    files.push({ name: 'Effect.tsx', language: 'tsx', code: reactComponent(effect, options) })
+    const component = effect.kind === 'transition' ? 'Transition.tsx' : effect.kind === 'slides' ? 'Slider.tsx' : 'Effect.tsx'
+    files.push({ name: component, language: 'tsx', code: reactComponent(effect, options) })
     files.push({ name: 'effect.js', language: 'js', code: base })
   } else {
     files.push({ name: 'effect.js', language: 'js', code: base })

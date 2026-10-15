@@ -60,7 +60,9 @@ export function mount(target, options = {}) {
     return { destroy() {}, set() {}, setOptions() {} }
   }
   canvas.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 600 })   // 3. плавное появление
-  return { ...effect, destroy() { effect.destroy(); canvas.remove() } }
+  const destroyEffect = effect.destroy                                   // 4. уборка вместе с холстом
+  effect.destroy = () => { destroyEffect(); canvas.remove() }
+  return effect
 }
 ```
 
@@ -69,6 +71,10 @@ export function mount(target, options = {}) {
 2. **Запасной вариант:** без WebGL2 вызывающий код получает объект-«пустышку» с теми же
    методами — ваш код не упадёт на `effect.destroy()`.
 3. **Плавное появление:** первый кадр не «вспыхивает».
+4. **Уборка:** `destroy()` заодно убирает наш холст. Возвращаем **сам** объект эффекта, а не
+   копию `{ ...effect }`: при копировании геттер (например, `index` у слайдера — «какой слайд
+   сейчас») превратился бы в число, которое больше никогда не меняется. На этом мы попались —
+   тест «экспортированный слайдер листается» показал `index: 0` после `next()`.
 
 Для эффектов картинки `mount()` находит `<img>` внутри блока и отдаёт её рантайму:
 `const spec = { ...SPEC, image: target.querySelector('img') }`.

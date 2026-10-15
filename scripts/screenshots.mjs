@@ -9,13 +9,14 @@ import { chromium } from '@playwright/test'
 const base = process.argv[2] ?? 'http://localhost:5190'
 const browser = await chromium.launch({ channel: 'chrome' })
 
-async function shot(name, { path, width = 1440, height = 900, mobile = false, steps } = {}) {
+async function shot(name, { path, width = 1440, height = 900, mobile = false, steps, settle = true } = {}) {
   const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: 2, isMobile: mobile, hasTouch: mobile })
   await page.goto(base + path)
   await page.waitForTimeout(1200)
-  await steps?.(page)
   await page.evaluate(() => document.fonts.ready)
-  await page.waitForTimeout(500)
+  await steps?.(page)
+  // settle: false — снимаем сразу после шагов (например, посреди анимации).
+  if (settle) await page.waitForTimeout(500)
   // Панель FPS в Студии включена при разработке — на картинках она не нужна.
   await page.evaluate(() => document.querySelectorAll('.k3d-perf').forEach((el) => el.remove()))
   const png = await page.screenshot()
@@ -37,6 +38,25 @@ await shot('studio-aurora', { path: '/studio.html?e=aurora&background=02060c&col
 await shot('studio-lava', { path: '/studio.html?e=lava' })
 await shot('studio-space', { path: '/studio.html?e=space' })
 await shot('studio-image', { path: '/studio.html?e=image-distort&mode=rgb', steps: (p) => hover(p, '.photo') })
+await shot('studio-burn', {
+  path: '/studio.html?e=burn',
+  steps: async (p) => {
+    const demo = p.locator('.demo')
+    const h = await demo.evaluate((d) => d.clientHeight)
+    await demo.evaluate((d, y) => d.scrollTo(0, y), 0.7 * h + 0.5 * h)
+    await p.waitForTimeout(400)
+    await demo.evaluate((d, y) => d.scrollTo(0, y), 0.7 * h + 0.62 * h)
+    await p.waitForTimeout(300)
+  },
+})
+await shot('studio-slides', {
+  path: '/studio.html?e=slides&mode=circle&edge=22d3ee&softness=0.05&intensity=0.8&duration=3',
+  steps: async (p) => {
+    await p.getByRole('button', { name: 'Следующий слайд' }).click()
+    await p.waitForTimeout(900)
+  },
+  settle: false,
+})
 await shot('studio-tilt', { path: '/studio.html?e=tilt', steps: (p) => hover(p, '.tilt-card') })
 await shot('code', { path: '/studio.html?e=noise', steps: (p) => p.getByRole('button', { name: 'Забрать код' }).click() })
 await shot('mobile', { path: '/studio.html?e=aurora', width: 390, height: 844, mobile: true })

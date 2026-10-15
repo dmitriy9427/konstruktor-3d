@@ -8,7 +8,16 @@ import { useId, useState } from 'react'
 import type { Param, PostOptions, Values } from '../runtime/runtime'
 import type { Common } from '../engine/params'
 
-export function ParamControl({ name, param, value, onChange }: { name: string; param: Param; value: Values[string]; onChange: (v: Values[string]) => void }) {
+export function ParamControl(props: { name: string; param: Param; value: Values[string]; onChange: (v: Values[string]) => void }) {
+  return (
+    <>
+      <ParamInput {...props} />
+      {props.param.hint && <p className="control__hint">{props.param.hint}</p>}
+    </>
+  )
+}
+
+function ParamInput({ name, param, value, onChange }: { name: string; param: Param; value: Values[string]; onChange: (v: Values[string]) => void }) {
   const id = useId()
   switch (param.type) {
     case 'number':

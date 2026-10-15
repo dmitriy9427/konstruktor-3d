@@ -12,8 +12,12 @@ export type EffectKind =
   | 'image'
   /** Без WebGL: CSS-трансформации (наклон карточки). */
   | 'css'
+  /** Слайдер: несколько картинок и шейдерный переход между ними. */
+  | 'slides'
+  /** Переход между секциями: SVG-фильтр поверх настоящей секции. */
+  | 'transition'
 
-export type Category = 'Фоны' | 'Изображения' | 'Без WebGL'
+export type Category = 'Фоны' | 'Изображения' | 'Переходы' | 'Без WebGL'
 
 export type EffectDef = {
   id: string

@@ -7,17 +7,20 @@
  * нельзя. (StrictMode в разработке монтирует эффект дважды — так каждый
  * запуск получает свежий холст.)
  */
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 
 import type { EffectDef } from '../effects/types'
 import type { Common } from '../engine/params'
 import { createEffect, type EffectInstance, type Values } from '../runtime/runtime'
 import { createTilt, type TiltInstance } from '../runtime/tilt'
+import { createTransition, type TransitionInstance, type TransitionTrigger } from '../runtime/transition'
 
 type Props = { effect: EffectDef; values: Values; common: Common; image: string }
 
 export function Preview(props: Props) {
   if (props.effect.kind === 'css') return <TiltPreview {...props} />
+  if (props.effect.kind === 'transition') return <TransitionPreview {...props} />
+  if (props.effect.kind === 'slides') return <SlidesPreview key={props.effect.id} {...props} />
   return <ShaderPreview key={props.effect.id} {...props} />
 }
 
@@ -104,6 +107,140 @@ function TiltPreview({ values, image }: Props) {
           <p>Карточка наклоняется за курсором, по ней бежит блик. Только CSS — без WebGL.</p>
         </div>
       </article>
+    </div>
+  )
+}
+
+/**
+ * Превью перехода — маленькая страница внутри превью, её можно прокручивать.
+ * «Секция 1» лежит поверх «Секции 2» в «липком» стеке, как на настоящем сайте.
+ * Переход пересоздаётся при каждом изменении параметров (поле времени
+ * зависит от них); прогресс для «Появления» и «Из кода» сохраняем.
+ */
+function TransitionPreview({ effect, values }: Props) {
+  const scroller = useRef<HTMLDivElement>(null)
+  const cover = useRef<HTMLElement>(null)
+  const instance = useRef<TransitionInstance | null>(null)
+  const kept = useRef(0)
+  const trigger = values.trigger as TransitionTrigger
+
+  useEffect(() => {
+    if (!cover.current || !scroller.current) return
+    const t = createTransition(cover.current, { ...values, name: effect.name }, { scroller: scroller.current, trigger })
+    if (trigger === 'manual' && kept.current) t.progress(kept.current)
+    instance.current = t
+    return () => {
+      kept.current = t.value
+      t.destroy()
+      instance.current = null
+    }
+  }, [effect, values, trigger])
+
+  // Новый режим запуска — начинаем сначала.
+  useEffect(() => {
+    kept.current = 0
+    scroller.current?.scrollTo({ top: 0 })
+  }, [trigger, effect])
+
+  const scrollable = trigger !== 'manual'
+  return (
+    <div className="preview preview--transition">
+      <div ref={scroller} className={`demo demo--${trigger}`}>
+        {scrollable && (
+          <div className="demo__intro">
+            <p>{trigger === 'scroll' ? 'Прокрутите превью вниз — переход идёт вместе со скроллом' : 'Прокрутите вниз — секция сгорит, когда покажется'}</p>
+            <span aria-hidden="true">↓</span>
+          </div>
+        )}
+        <div className="demo__stack">
+          <section ref={cover} className="demo__a">
+            <p className="demo__eyebrow">Секция 1</p>
+            <h2>Всё, что было до</h2>
+            <p>Это настоящая HTML-секция: текст выделяется, кнопка нажимается. Переход не делает снимок страницы — он прожигает дыры прямо в ней.</p>
+            <button type="button" className="button">Кнопка внутри</button>
+          </section>
+          <section className="demo__b">
+            <p className="demo__eyebrow">Секция 2</p>
+            <h2>Всё, что будет после</h2>
+          </section>
+        </div>
+        {scrollable && <div className="demo__outro">Конец страницы</div>}
+      </div>
+      {!scrollable && (
+        <div className="demo__controls">
+          <button type="button" className="button button--primary" onClick={() => instance.current?.play()}>
+            Сжечь
+          </button>
+          <button type="button" className="button" onClick={() => instance.current?.reverse()}>
+            Вернуть
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+const SLIDES = ['photo.svg', 'photo-2.svg', 'photo-3.svg'].map((name) => `${import.meta.env.BASE_URL}demo/${name}`)
+
+/** Превью слайдера: три демо-фото, кнопки и точки. */
+function SlidesPreview({ effect, values, common, image }: Props) {
+  const host = useRef<HTMLDivElement>(null)
+  const instance = useRef<EffectInstance | null>(null)
+  const [index, setIndex] = useState(0)
+  const [error, setError] = useState('')
+  const latest = useRef({ values, common })
+  useLayoutEffect(() => {
+    latest.current = { values, common }
+  })
+  // Своя картинка встаёт первым слайдом.
+  const images = useMemo(() => (image.startsWith('blob:') ? [image, ...SLIDES.slice(1)] : SLIDES), [image])
+
+  useEffect(() => {
+    if (!host.current) return
+    const canvas = document.createElement('canvas')
+    canvas.className = 'slider__canvas'
+    host.current.append(canvas)
+    try {
+      const { values: v, common: c } = latest.current
+      instance.current = createEffect(
+        canvas,
+        { name: effect.name, fragment: effect.fragment!, params: effect.params, values: v, images },
+        { mouse: c.mouse, inertia: c.inertia, quality: c.quality, post: c.post, reducedMotion: false },
+      )
+    } catch (e) {
+      // oxlint-disable-next-line react/set-state-in-effect
+      setError(e instanceof Error ? e.message : String(e))
+    }
+    // Номер слайда — из рантайма (меняется и автопрокруткой).
+    const timer = setInterval(() => instance.current && setIndex(instance.current.index), 150)
+    return () => {
+      clearInterval(timer)
+      instance.current?.destroy()
+      instance.current = null
+      canvas.remove()
+    }
+  }, [effect, images])
+
+  useEffect(() => instance.current?.set(values), [values])
+  useEffect(() => instance.current?.setOptions({ mouse: common.mouse, inertia: common.inertia, quality: common.quality, post: common.post }), [common])
+
+  return (
+    <div className="preview preview--image">
+      <div ref={host} className="slider">
+        <img src={images[0]} alt="Слайд 1" />
+      </div>
+      <div className="slider__nav">
+        <button type="button" className="icon-button" aria-label="Предыдущий слайд" onClick={() => instance.current?.prev()}>
+          ←
+        </button>
+        {images.map((_, i) => (
+          <button key={i} type="button" className="slider__dot" aria-label={`Слайд ${i + 1}`} aria-current={i === index} onClick={() => instance.current?.goTo(i)} />
+        ))}
+        <button type="button" className="icon-button" aria-label="Следующий слайд" onClick={() => instance.current?.next()}>
+          →
+        </button>
+      </div>
+      {error && <p className="preview__error">{error}</p>}
     </div>
   )
 }

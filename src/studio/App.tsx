@@ -62,7 +62,8 @@ export function App() {
     setTimeout(() => setCopiedLink(false), 1500)
   }
 
-  const shader = effect.kind !== 'css'
+  const shader = effect.kind === 'quad' || effect.kind === 'image' || effect.kind === 'slides'
+  const hasCommon = shader || Boolean(effect.usesMouse)
 
   return (
     <div className="studio">
@@ -140,7 +141,7 @@ export function App() {
           <ParamControl key={`${effectId}-${key}`} name={key} param={param} value={values[key]} onChange={(v) => setValues((prev) => ({ ...prev, [key]: v }))} />
         ))}
 
-        {effect.kind !== 'quad' && (
+        {(effect.kind === 'image' || effect.kind === 'css' || effect.kind === 'slides') && (
           <label className="upload">
             <input
               type="file"
@@ -154,7 +155,7 @@ export function App() {
           </label>
         )}
 
-        <h3 className="panel__subtitle">Общие</h3>
+        {hasCommon && <h3 className="panel__subtitle">Общие</h3>}
         <CommonControls common={common} onChange={setCommon} usesMouse={effect.usesMouse ?? false} shader={shader} />
       </aside>
 

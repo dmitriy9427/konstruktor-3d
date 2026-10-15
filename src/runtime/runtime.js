@@ -15,6 +15,7 @@
  *   - WebGL2, один полноэкранный треугольник, сборку шейдера;
  *   - общие uniform: время, размер, мышь (с инерцией), наведение, прокрутка;
  *   - картинку-текстуру (для эффектов «искажение изображения»);
+ *   - слайды: несколько картинок и анимированный переход между ними;
  *   - постобработку: зерно, хроматическая аберрация, виньетка, свечение;
  *   - экономию: кадры только пока эффект на экране, «уменьшить движение»,
  *     потолок плотности пикселей и его автоматическое снижение при просадке FPS;
@@ -125,7 +126,19 @@ export function buildFragment(spec) {
     .map(([key, param]) => `uniform ${glslType(param)} ${uniformName(key)};`)
     .join('\n')
   const image = spec.image ? 'uniform sampler2D uImage;\nuniform vec2 uImageRes;\n' : ''
-  return `#version 300 es\n${COMMON}\n${image}${decls}\nout vec4 fragColor;\n${spec.fragment}`
+  // Слайды: «откуда» и «куда» + прогресс перехода 0…1 и направление (1 — вперёд, −1 — назад).
+  const slides = spec.images
+    ? `uniform sampler2D uFrom;
+uniform sampler2D uTo;
+uniform vec2 uFromRes;
+uniform vec2 uToRes;
+uniform float uProgress;
+uniform float uDirection;
+vec3 fromAt(vec2 uv) { return texture(uFrom, coverUv(uv, uResolution, uFromRes)).rgb; }
+vec3 toAt(vec2 uv) { return texture(uTo, coverUv(uv, uResolution, uToRes)).rgb; }
+`
+    : ''
+  return `#version 300 es\n${COMMON}\n${image}${decls}\n${slides}out vec4 fragColor;\n${spec.fragment}`
 }
 
 const DEFAULT_POST = { grain: 0, chroma: 0, vignette: 0, bloom: 0 }
@@ -152,6 +165,7 @@ export function createEffect(canvas, spec, options = {}) {
     post: { ...DEFAULT_POST, ...options.post },
   }
   const values = { ...defaultsOf(spec.params), ...spec.values }
+  let destroyed = false
 
   // ─── Шейдеры ──────────────────────────────────────────────────────────────
   const compile = (type, source) => {
@@ -197,25 +211,53 @@ export function createEffect(canvas, spec, options = {}) {
   gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0)
 
   // ─── Картинка (для эффектов изображения) ──────────────────────────────────
-  let imageTexture = null
-  let imageSize = [1, 1]
-  const loadImage = (source) => {
+  // Текстура = { texture, size }. Одна для эффектов картинки, по одной на слайд.
+  const textures = []
+  const loadTexture = (source, slot) => {
     const img = typeof source === 'string' ? Object.assign(new Image(), { src: source }) : source
     const upload = () => {
       if (destroyed || !img.naturalWidth) return
-      imageTexture ??= gl.createTexture()
-      gl.bindTexture(gl.TEXTURE_2D, imageTexture)
+      slot.texture ??= gl.createTexture()
+      gl.bindTexture(gl.TEXTURE_2D, slot.texture)
       gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true)
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img)
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
-      imageSize = [img.naturalWidth, img.naturalHeight]
+      slot.size = [img.naturalWidth, img.naturalHeight]
       requestDraw()
     }
     if (img.complete && img.naturalWidth) upload()
     else img.addEventListener('load', upload, { once: true })
   }
+  const imageSlot = { texture: null, size: [1, 1] }
+  const loadImage = (source) => loadTexture(source, imageSlot)
+  const slideSlots = (spec.images ?? []).map(() => ({ texture: null, size: [1, 1] }))
+  textures.push(imageSlot, ...slideSlots)
+
+  // ─── Слайды ───────────────────────────────────────────────────────────────
+  // Переход: from → to, прогресс едет 0 → 1 за duration секунд. Длительность и
+  // автопрокрутку рантайм читает из параметров эффекта (duration, autoplay).
+  const slide = { from: 0, to: 0, progress: 1, direction: 1, active: false, idle: 0 }
+  const slideCount = slideSlots.length
+  const goTo = (index, direction) => {
+    if (!slideCount) return
+    const next = ((index % slideCount) + slideCount) % slideCount
+    if (next === slide.to && !slide.active) return
+    // Новый переход во время старого начинается с того слайда, что уже виден.
+    slide.from = slide.active && slide.progress > 0.5 ? slide.to : slide.active ? slide.from : slide.to
+    slide.to = next
+    slide.direction = direction ?? (next >= slide.from ? 1 : -1)
+    slide.progress = 0
+    slide.active = true
+    slide.idle = 0
+    if (opts.reducedMotion) {
+      slide.progress = 1
+      slide.active = false
+    }
+    requestDraw()
+  }
+  const easeInOut = (x) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2)
 
   // ─── Кадр для постобработки ───────────────────────────────────────────────
   let fbo = null
@@ -278,7 +320,6 @@ export function createEffect(canvas, spec, options = {}) {
   }
 
   // ─── Цикл кадров ──────────────────────────────────────────────────────────
-  let destroyed = false
   let visible = true
   let paused = false
   let frame = 0
@@ -293,7 +334,8 @@ export function createEffect(canvas, spec, options = {}) {
   const timer = gl.getExtension('EXT_disjoint_timer_query_webgl2')
   let query = null
 
-  const running = () => !destroyed && visible && !paused && !opts.reducedMotion
+  // Слайдеру кадры нужны только во время перехода (и для автопрокрутки).
+  const running = () => !destroyed && visible && !paused && !opts.reducedMotion && (!slideCount || slide.active || Number(values.autoplay) > 0)
 
   function requestDraw() {
     if (!frame && !destroyed) frame = requestAnimationFrame(tick)
@@ -307,6 +349,16 @@ export function createEffect(canvas, spec, options = {}) {
     const cpuStart = performance.now()
 
     if (!opts.reducedMotion && !paused) time += dt
+    if (slide.active) {
+      slide.progress = Math.min(1, slide.progress + dt / Math.max(0.05, Number(values.duration ?? 1.2)))
+      if (slide.progress >= 1) {
+        slide.active = false
+        slide.from = slide.to
+      }
+    } else if (slideCount > 1 && Number(values.autoplay) > 0 && visible && !paused && !opts.reducedMotion) {
+      slide.idle += dt
+      if (slide.idle >= Number(values.autoplay)) goTo(slide.to + 1, 1)
+    }
     const k = 1 - Math.exp(-dt * (1 / Math.max(opts.inertia, 0.001)) * 0.25)
     const follow = opts.mouse && !opts.reducedMotion
     pointer.x += ((follow ? pointer.tx : 0.5) - pointer.x) * k
@@ -361,9 +413,23 @@ export function createEffect(canvas, spec, options = {}) {
     }
     if (spec.image) {
       gl.activeTexture(gl.TEXTURE0)
-      gl.bindTexture(gl.TEXTURE_2D, imageTexture)
+      gl.bindTexture(gl.TEXTURE_2D, imageSlot.texture)
       gl.uniform1i(main.loc('uImage'), 0)
-      gl.uniform2f(main.loc('uImageRes'), imageSize[0], imageSize[1])
+      gl.uniform2f(main.loc('uImageRes'), imageSlot.size[0], imageSlot.size[1])
+    }
+    if (slideCount) {
+      const from = slideSlots[slide.active ? slide.from : slide.to]
+      const to = slideSlots[slide.to]
+      gl.activeTexture(gl.TEXTURE2)
+      gl.bindTexture(gl.TEXTURE_2D, from.texture)
+      gl.uniform1i(main.loc('uFrom'), 2)
+      gl.activeTexture(gl.TEXTURE3)
+      gl.bindTexture(gl.TEXTURE_2D, to.texture)
+      gl.uniform1i(main.loc('uTo'), 3)
+      gl.uniform2f(main.loc('uFromRes'), from.size[0], from.size[1])
+      gl.uniform2f(main.loc('uToRes'), to.size[0], to.size[1])
+      gl.uniform1f(main.loc('uProgress'), slide.active ? easeInOut(slide.progress) : 1)
+      gl.uniform1f(main.loc('uDirection'), slide.direction)
     }
     gl.bindVertexArray(vao)
     gl.drawArrays(gl.TRIANGLES, 0, 3)
@@ -419,6 +485,7 @@ export function createEffect(canvas, spec, options = {}) {
   }
   resize()
   if (spec.image) loadImage(spec.image)
+  spec.images?.forEach((source, i) => loadTexture(source, slideSlots[i]))
   requestDraw()
 
   const registry = (globalThis.__K3D_EFFECTS__ ??= new Set())
@@ -444,6 +511,20 @@ export function createEffect(canvas, spec, options = {}) {
     },
     /** Новая картинка для эффектов изображения: адрес или <img>. */
     setImage: loadImage,
+    /** Слайды: следующий, предыдущий, по номеру. */
+    next() {
+      goTo(slide.to + 1, 1)
+    },
+    prev() {
+      goTo(slide.to - 1, -1)
+    },
+    goTo(index) {
+      goTo(index)
+    },
+    /** Номер слайда, который показан (или к которому идёт переход). */
+    get index() {
+      return slide.to
+    },
     play() {
       paused = false
       requestDraw()
@@ -463,7 +544,7 @@ export function createEffect(canvas, spec, options = {}) {
       gl.deleteProgram(post.program)
       gl.deleteBuffer(buffer)
       gl.deleteVertexArray(vao)
-      if (imageTexture) gl.deleteTexture(imageTexture)
+      for (const slot of textures) if (slot.texture) gl.deleteTexture(slot.texture)
       if (fboTexture) gl.deleteTexture(fboTexture)
       if (fbo) gl.deleteFramebuffer(fbo)
       gl.getExtension('WEBGL_lose_context')?.loseContext()

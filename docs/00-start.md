@@ -38,11 +38,12 @@
 ```
 src/
 ├─ runtime/            ← то, что попадает в ваш проект
-│  ├─ runtime.js       рантайм шейдерных эффектов (без import — самодостаточный)
+│  ├─ runtime.js       рантайм шейдерных эффектов и слайдов (без import — самодостаточный)
+│  ├─ transition.js    переходы между секциями: прожигание, растворение, шторка
 │  └─ tilt.js          наклон карточки на CSS
 ├─ effects/            ← каталог: каждый эффект — данные (шейдер + параметры + пресеты)
-│  ├─ noise.ts  lava.ts  waves.ts  clouds.ts  space.ts  aurora.ts
-│  ├─ image-distort.ts  tilt.ts
+│  ├─ noise.ts  lava.ts  waves.ts  clouds.ts  space.ts  aurora.ts  plasma.ts
+│  ├─ image-distort.ts  slides.ts  transitions.ts  tilt.ts
 │  └─ index.ts         список эффектов и категорий
 ├─ engine/             ← логика без интерфейса
 │  ├─ params.ts        проверка значений, «Случайно», запись в адрес

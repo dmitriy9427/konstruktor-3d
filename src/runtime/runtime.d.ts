@@ -22,6 +22,8 @@ export type EffectSpec = {
   values?: Values
   /** Картинка для эффектов изображения: адрес или <img>. */
   image?: string | HTMLImageElement
+  /** Слайды: картинки для перехода между ними (адреса или <img>). */
+  images?: (string | HTMLImageElement)[]
   /** С какого времени начинать анимацию (секунды) — первый кадр сразу «красивый». */
   startTime?: number
 }
@@ -60,6 +62,10 @@ export type EffectInstance = {
   set(values: Values): void
   setOptions(options: EffectOptions): void
   setImage(source: string | HTMLImageElement): void
+  next(): void
+  prev(): void
+  goTo(index: number): void
+  readonly index: number
   play(): void
   pause(): void
   /** Освобождает WebGL-контекст: для нового эффекта нужен новый canvas. */

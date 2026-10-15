@@ -8,14 +8,16 @@ import { imageDistort } from './image-distort'
 import { lava } from './lava'
 import { noise } from './noise'
 import { plasma } from './plasma'
+import { slides } from './slides'
 import { space } from './space'
 import { tilt } from './tilt'
+import { burn, curtain, dissolve } from './transitions'
 import type { Category, EffectDef } from './types'
 import { waves } from './waves'
 
-export const EFFECTS: EffectDef[] = [noise, lava, waves, clouds, space, aurora, plasma, imageDistort, tilt]
+export const EFFECTS: EffectDef[] = [noise, lava, waves, clouds, space, aurora, plasma, imageDistort, burn, dissolve, curtain, slides, tilt]
 
-export const CATEGORIES: Category[] = ['Фоны', 'Изображения', 'Без WebGL']
+export const CATEGORIES: Category[] = ['Фоны', 'Изображения', 'Переходы', 'Без WebGL']
 
 export const effectById = (id: string) => EFFECTS.find((e) => e.id === id)
 
