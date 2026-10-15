@@ -39,7 +39,9 @@ for (const effect of EFFECTS) {
     const errors: string[] = []
     page.on('console', (msg) => msg.type() === 'error' && errors.push(msg.text()))
     page.on('pageerror', (e) => errors.push(e.message))
-    await page.goto(`studio.html?e=${effect.id}`)
+    // 3D в CI рисует программный рендер (SwiftShader): меньше пикселей и больше времени.
+    if (effect.kind === 'three') test.slow()
+    await page.goto(`studio.html?e=${effect.id}${effect.kind === 'three' ? '&_quality=0.5' : ''}`)
     await expect(page.getByRole('heading', { level: 1, name: effect.name }).or(page.locator('.preview--image, .preview--tilt, .preview--transition'))).toBeVisible()
     await expect(page.locator('.preview__error')).toHaveCount(0)
     if (effect.kind === 'transition') {
@@ -155,6 +157,7 @@ test('экспортированный слайдер листается на ч
 })
 
 test('экспортированный 3D-эффект работает на чистой странице через import map', async ({ page }) => {
+  test.slow()
   // CDN подменяем файлами из node_modules: тест не зависит от сети.
   await page.route(/cdn\.jsdelivr\.net\/npm\/three@[^/]+\/(.+)$/, (route) => {
     const path = /three@[^/]+\/(.+)$/.exec(route.request().url())![1]
