@@ -287,6 +287,9 @@ vec3 rainStreaks(vec2 p) {
   if (gRain <= 0.0) return vec3(0.0);
   vec2 q = rot(-radians(uRainAngle)) * p;
   float sum = 0.0;
+  // Сверху капли летят почти на нас — видны короткими чёрточками, сбоку — длинными штрихами.
+  float side = smoothstep(0.0, 0.45, uHorizon);
+  float len = mix(0.12, 0.45, side);
   for (int i = 0; i < 3; i++) {
     float fi = float(i);
     float scale = 14.0 + fi * 10.0;
@@ -296,11 +299,10 @@ vec3 rainStreaks(vec2 p) {
     float present = step(hash(id + fi * 11.0), gRain * 0.8);
     float x = hash(id * 1.7 + 3.0) * 0.8 + 0.1;
     float head = hash(id * 2.3 + 7.0);
-    float line = smoothstep(0.06, 0.0, abs(f.x - x)) * smoothstep(head - 0.45, head, f.y) * step(f.y, head);
+    float line = smoothstep(0.06, 0.0, abs(f.x - x)) * smoothstep(head - len, head, f.y) * step(f.y, head);
     sum += line * present * (0.55 - fi * 0.12);
   }
-  // Сверху (горизонт за кадром) капли летят на нас — штрихов почти не видно, видны круги.
-  sum *= smoothstep(0.0, 0.45, uHorizon);
+  sum *= mix(1.6, 1.0, side);   // короткие чёрточки чуть ярче, чтобы читались
   return gHor * sum * 0.6 + vec3(gFlash * sum * 0.4);
 }
 
