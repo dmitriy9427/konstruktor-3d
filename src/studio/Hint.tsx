@@ -47,6 +47,9 @@ export function WithHint({ hint, children }: { hint?: string; children: ReactNod
   } = useFloating({
     open,
     placement: 'left',
+    // fixed — подсказка не участвует в раскладке страницы. С absolute невидимые
+    // подсказки (их по одной на параметр) растягивали документ, и страница прокручивалась.
+    strategy: 'fixed',
     middleware: [offset(14), flip({ fallbackPlacements: ['top', 'bottom'] }), shift({ padding: 8 })],
     whileElementsMounted: autoUpdate,
   })

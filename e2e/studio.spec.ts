@@ -240,3 +240,20 @@ test('«Сутки по прокрутке»: море прилипло, при 
   await page.getByRole('dialog').getByRole('tab', { name: 'index.html' }).click()
   await expect(page.getByRole('dialog').locator('code')).toContainText("scrollStack: document.querySelector('.day-cycle')")
 })
+
+test('страница Студии не прокручивается, подсказка встаёт рядом со строкой', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  for (const id of ['waves', 'galaxy', 'noise']) {
+    await page.goto(`studio.html?e=${id}`)
+    await page.waitForTimeout(300)
+    expect(await page.evaluate(() => document.documentElement.scrollHeight - innerHeight), id).toBeLessThanOrEqual(0)
+  }
+  // Подсказка у строки в глубине панели — рядом с ней, а не где-то внизу страницы.
+  await page.locator('.panel').evaluate((el) => (el.scrollTop = 600))
+  const row = page.locator('.hinted').nth(8)
+  await row.hover()
+  const tip = page.locator('.tooltip[data-open="true"]')
+  await expect(tip).toBeVisible()
+  const [r, t] = await Promise.all([row.boundingBox(), tip.boundingBox()])
+  expect(Math.abs(t!.y + t!.height / 2 - (r!.y + r!.height / 2))).toBeLessThan(120)
+})
