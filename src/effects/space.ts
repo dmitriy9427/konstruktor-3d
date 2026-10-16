@@ -94,21 +94,23 @@ export const space: EffectDef = {
       label: 'Своё созвездие',
       default: '0.3,0.3,0;0.42,0.42,1;0.55,0.38,1;0.66,0.5,1;0.55,0.38,0;0.58,0.24,1',
       max: 32,
-      // Пока рисуют — показываем своё созвездие и линии сразу (в «Прорисовке» новая звезда видна не сразу).
-      enable: { constellations: 'custom', constStyle: 'static' },
+      // Пока рисуют — показываем своё созвездие (и не прячем его анимацией «по кругу»).
+      enable: { constellations: 'custom' },
       hint: 'Нажмите «Рисовать», потом кликайте по превью — каждая звезда соединится с предыдущей. «Новая линия» — следующая звезда начнёт отдельную линию',
     },
     constStyle: {
       type: 'select',
-      label: 'Вид созвездий',
-      hint: 'Линии сразу; Прорисовка — линии рисуются по очереди и гаснут; Пульс — линии мягко пульсируют',
+      label: 'Появление созвездий',
+      hint: 'Сразу — видно целиком. Прорисовка — звёзды и линии появляются по очереди и остаются. По кругу — рисуется, гаснет и снова. Пульс — линии мягко «дышат»',
       options: [
-        { value: 'static', label: 'Линии' },
+        { value: 'static', label: 'Сразу' },
         { value: 'draw', label: 'Прорисовка' },
+        { value: 'loop', label: 'По кругу' },
         { value: 'pulse', label: 'Пульс' },
       ],
       default: 'draw',
     },
+    drawSpeed: { type: 'number', label: 'Скорость прорисовки', min: 0.1, max: 3, step: 0.01, default: 1, hint: 'Сколько линий в секунду дорисовывается (для «Прорисовка» и «По кругу»)' },
     constBrightness: { type: 'number', label: 'Яркость созвездий', min: 0, max: 2, step: 0.01, default: 1, hint: 'Яркость звёзд и линий созвездий' },
 
     background: { type: 'color', label: 'Фон', default: '#03030a', hint: 'Цвет космоса' },
@@ -122,7 +124,7 @@ export const space: EffectDef = {
     { name: 'Глубокий космос', values: { nebulaA: '#4b1d8f', nebulaB: '#0f6c8a' } },
     { name: 'Звездопад', values: { meteors: 1, meteorLength: 0.45, nebula: 0.4, constellations: 'none', meteorSpeed: 1.4 } },
     { name: 'Огненные шары', values: { meteors: 0.6, meteorShape: 'fireball', meteorColor: '#ffb36b', nebula: 0.5 } },
-    { name: 'Атлас созвездий', values: { constellations: 'all', constStyle: 'static', nebula: 0.35, meteors: 0.15, density: 0.6 } },
+    { name: 'Атлас созвездий', values: { constellations: 'all', constStyle: 'draw', drawSpeed: 2, nebula: 0.35, meteors: 0.15, density: 0.6 } },
     { name: 'Красное кольцо', values: { nebulaShape: 'ring', nebulaA: '#8f1d3b', nebulaB: '#c46a1b', nebula: 1.1, nebulaX: 0.5, nebulaY: 0.5, constellations: 'none' } },
     { name: 'Волокна', values: { nebulaShape: 'filaments', nebulaA: '#1fe08a', nebulaB: '#7b5cff', nebula: 1.2, nebulaDrift: 0.8 } },
   ],
@@ -227,13 +229,19 @@ vec3 constPoint(vec2 p, vec3 a, vec3 prev, bool hasPrev, float idx, float total)
   vec3 col = vec3(0.0);
   float bright = uConstBrightness;
   // Анимация: прорисовка — линии появляются по очереди, потом всё гаснет и снова.
+  // Прорисовка: «сколько линий уже нарисовано» растёт со временем от запуска эффекта
+  // (рантайм начинает время с 4 с). Новая точка своего созвездия появляется сразу,
+  // потому что к этому моменту прогресс давно её обогнал.
   float show = 1.0;
   float part = 1.0;
+  float drawn = (uTime - 4.0) * uDrawSpeed;
   if (uConstStyle > 0.5 && uConstStyle < 1.5) {
-    float cycle = mod(uTime * 0.35, total + 3.0);
+    part = clamp(drawn - idx, 0.0, 1.0);
+  } else if (uConstStyle > 1.5 && uConstStyle < 2.5) {
+    float cycle = mod(drawn, total + 3.0);
     part = clamp(cycle - idx, 0.0, 1.0);
     show = smoothstep(total + 3.0, total + 2.0, cycle);
-  } else if (uConstStyle > 1.5) {
+  } else if (uConstStyle > 2.5) {
     show = 0.55 + 0.45 * sin(uTime * 1.6 - idx * 0.7);
   }
   if (hasPrev && a.z > 0.5) {
@@ -244,7 +252,10 @@ vec3 constPoint(vec2 p, vec3 a, vec3 prev, bool hasPrev, float idx, float total)
     col += uLineColor * line * show * step(0.001, part) * bright;
   }
   float ds = length(p - A);
-  float starOn = uConstStyle > 0.5 && uConstStyle < 1.5 ? step(idx, mod(uTime * 0.35, total + 3.0)) * show : 1.0;
+  // Звезда загорается, когда до неё дошла прорисовка.
+  float starOn = 1.0;
+  if (uConstStyle > 0.5 && uConstStyle < 1.5) starOn = smoothstep(idx - 0.3, idx, drawn);
+  else if (uConstStyle > 1.5 && uConstStyle < 2.5) starOn = step(idx, mod(drawn, total + 3.0)) * show;
   col += uStarColor * (smoothstep(0.007, 0.0, ds) * 1.4 + exp(-ds * 90.0) * 0.5) * starOn * bright;
   return col;
 }
