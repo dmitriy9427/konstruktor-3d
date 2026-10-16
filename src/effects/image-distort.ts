@@ -21,6 +21,7 @@ export const imageDistort: EffectDef = {
     mode: {
       type: 'select',
       label: 'Режим',
+      hint: 'Вид искажения: волна, RGB-сдвиг или рябь',
       options: [
         { value: 'wave', label: 'Волна' },
         { value: 'rgb', label: 'RGB-сдвиг' },
@@ -28,11 +29,11 @@ export const imageDistort: EffectDef = {
       ],
       default: 'wave',
     },
-    strength: { type: 'number', label: 'Сила', min: 0, max: 1, step: 0.01, default: 0.45 },
-    radius: { type: 'number', label: 'Радиус', min: 0.05, max: 1, step: 0.01, default: 0.35 },
-    speed: { type: 'number', label: 'Скорость', min: 0, max: 3, step: 0.01, default: 1 },
-    zoom: { type: 'number', label: 'Приближение', min: 1, max: 1.3, step: 0.005, default: 1.06 },
-    always: { type: 'boolean', label: 'Всегда, без наведения', default: false },
+    strength: { type: 'number', label: 'Сила', min: 0, max: 1, step: 0.01, default: 0.45, hint: 'Сила искажения' },
+    radius: { type: 'number', label: 'Радиус', min: 0.05, max: 1, step: 0.01, default: 0.35, hint: 'Радиус действия вокруг курсора' },
+    speed: { type: 'number', label: 'Скорость', min: 0, max: 3, step: 0.01, default: 1, hint: 'Скорость анимации искажения' },
+    zoom: { type: 'number', label: 'Приближение', min: 1, max: 1.3, step: 0.005, default: 1.06, hint: 'Приближение картинки; нужно, чтобы по краям не было пустоты при искажении' },
+    always: { type: 'boolean', label: 'Всегда, без наведения', default: false, hint: 'Включено — картинка плывёт сама, выключено — только при наведении курсора' },
   },
   presets: [
     { name: 'Жидкость', values: { mode: 'wave', strength: 0.5 } },

@@ -13,15 +13,16 @@ export const tilt: EffectDef = {
   description: 'Карточка наклоняется за курсором, по ней бежит блик',
   usesMouse: true,
   params: {
-    max: { type: 'number', label: 'Угол, °', min: 2, max: 30, step: 1, default: 12 },
-    perspective: { type: 'number', label: 'Перспектива, px', min: 300, max: 2000, step: 10, default: 900 },
-    scale: { type: 'number', label: 'Увеличение', min: 1, max: 1.15, step: 0.005, default: 1.04 },
-    inertia: { type: 'number', label: 'Инерция', min: 0, max: 0.9, step: 0.01, default: 0.15 },
-    glare: { type: 'number', label: 'Блик', min: 0, max: 1, step: 0.01, default: 0.35 },
-    reverse: { type: 'boolean', label: 'Наклон от курсора', default: false },
+    max: { type: 'number', label: 'Угол, °', min: 2, max: 30, step: 1, default: 12, hint: 'Максимальный угол наклона карточки в градусах' },
+    perspective: { type: 'number', label: 'Перспектива, px', min: 300, max: 2000, step: 10, default: 900, hint: 'Сила перспективы: меньше значение — сильнее «глубина»' },
+    scale: { type: 'number', label: 'Увеличение', min: 1, max: 1.15, step: 0.005, default: 1.04, hint: 'Во сколько раз карточка увеличивается при наведении' },
+    inertia: { type: 'number', label: 'Инерция', min: 0, max: 0.9, step: 0.01, default: 0.15, hint: 'Плавность: больше — карточка догоняет курсор медленнее' },
+    glare: { type: 'number', label: 'Блик', min: 0, max: 1, step: 0.01, default: 0.35, hint: 'Яркость блика, бегущего за курсором' },
+    reverse: { type: 'boolean', label: 'Наклон от курсора', default: false, hint: 'Включено — карточка наклоняется в сторону курсора, выключено — от него' },
     axis: {
       type: 'select',
       label: 'Оси',
+      hint: 'По каким осям карточка наклоняется',
       options: [
         { value: 'both', label: 'Обе' },
         { value: 'x', label: 'Только X' },

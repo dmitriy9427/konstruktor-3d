@@ -27,6 +27,10 @@ export function morph({ THREE, scene, camera, renderer, values, helpers }) {
       uChaos: { value: 1 },
       uSize: { value: 1 },
       uPixelRatio: { value: 1 },
+      uStagger: { value: 0.4 },
+      uSoftness: { value: 1.6 },
+      uBrightness: { value: 1 },
+      uJitter: { value: 0 },
       uColorA: { value: new THREE.Color() },
       uColorB: { value: new THREE.Color() },
     },
@@ -36,12 +40,14 @@ export function morph({ THREE, scene, camera, renderer, values, helpers }) {
       uniform float uChaos;
       uniform float uSize;
       uniform float uPixelRatio;
+      uniform float uStagger;
+      uniform float uJitter;
       attribute vec3 aTo;
       attribute float aDelay;
       varying float vT;
       void main() {
-        // Своя задержка: частица начинает путь в [delay·0.4, delay·0.4 + 0.6].
-        float t = smoothstep(aDelay * 0.4, aDelay * 0.4 + 0.6, uMorph);
+        // Своя задержка: частица начинает путь в [delay·s, delay·s + (1−s)], s — «Растянутость волны».
+        float t = smoothstep(aDelay * uStagger, aDelay * uStagger + (1.0 - uStagger), uMorph);
         vec3 p = mix(position, aTo, t);
         float swirl = sin(t * 3.14159) * uChaos;
         p += vec3(
@@ -49,6 +55,8 @@ export function morph({ THREE, scene, camera, renderer, values, helpers }) {
           cos(aDelay * 31.0 + uTime * 1.1),
           sin(aDelay * 23.0 - uTime)
         ) * swirl * 0.6;
+        // Дрожь частиц в собранном виде (и логотип, и фигура).
+        p += uJitter * 0.03 * vec3(sin(uTime * 3.0 + aDelay * 91.0), cos(uTime * 2.6 + aDelay * 67.0), sin(uTime * 2.2 + aDelay * 43.0));
         vT = t;
         vec4 view = modelViewMatrix * vec4(p, 1.0);
         gl_Position = projectionMatrix * view;
@@ -57,10 +65,12 @@ export function morph({ THREE, scene, camera, renderer, values, helpers }) {
     fragmentShader: /* glsl */ `
       uniform vec3 uColorA;
       uniform vec3 uColorB;
+      uniform float uSoftness;
+      uniform float uBrightness;
       varying float vT;
       void main() {
         float d = length(gl_PointCoord - 0.5);
-        float a = pow(1.0 - smoothstep(0.0, 0.5, d), 1.6);
+        float a = pow(1.0 - smoothstep(0.0, 0.5, d), uSoftness) * uBrightness;
         gl_FragColor = vec4(mix(uColorA, uColorB, vT) * a, a);
       }`,
   })
@@ -68,7 +78,7 @@ export function morph({ THREE, scene, camera, renderer, values, helpers }) {
   let points = null
   let built = ''
   const build = () => {
-    const key = [values.text, values.shape, values.count].join('|')
+    const key = [values.text, values.shape, values.count, values.weight, values.shapeSize, values.wave, values.depth].join('|')
     if (key === built) return
     built = key
     if (points) {
@@ -76,11 +86,18 @@ export function morph({ THREE, scene, camera, renderer, values, helpers }) {
       points.geometry.dispose()
     }
     const count = Math.round(values.count)
-    const from = helpers.samplePixels(helpers.drawText(String(values.text || '3D')), count, 4.2)
-    const to = helpers.shape(values.shape, count, 1.6)
+    const from = helpers.samplePixels(helpers.drawText(String(values.text || '3D'), values.weight), count, 4.2)
+    const to = helpers.shape(values.shape, count, values.shapeSize)
+    // Толщина логотипа: частицы выдвигаются по z (у плоского текста почти нет объёма).
+    for (let i = 0; i < count; i++) from[i * 3 + 2] = (Math.random() - 0.5) * values.depth
     const delay = new Float32Array(count)
-    // Задержка зависит от x логотипа: волна идёт слева направо (+ немного случайности).
-    for (let i = 0; i < count; i++) delay[i] = Math.min(1, Math.max(0, from[i * 3] / 4.2 + 0.5 + (Math.random() - 0.5) * 0.3))
+    // Откуда идёт волна: слева направо, из центра наружу, сверху вниз или вразнобой.
+    for (let i = 0; i < count; i++) {
+      const x = from[i * 3] / 4.2
+      const y = from[i * 3 + 1] / 4.2
+      const base = values.wave === 'center' ? Math.hypot(x, y) * 1.6 : values.wave === 'down' ? 0.5 - y * 1.6 : values.wave === 'random' ? Math.random() : x + 0.5
+      delay[i] = Math.min(1, Math.max(0, base + (Math.random() - 0.5) * 0.3))
+    }
     const geometry = new THREE.BufferGeometry()
     geometry.setAttribute('position', new THREE.BufferAttribute(from, 3))
     geometry.setAttribute('aTo', new THREE.BufferAttribute(to, 3))
@@ -111,11 +128,15 @@ export function morph({ THREE, scene, camera, renderer, values, helpers }) {
       u.uChaos.value = values.chaos
       u.uSize.value = values.size
       u.uPixelRatio.value = renderer.getPixelRatio()
+      u.uStagger.value = values.stagger
+      u.uSoftness.value = values.softness
+      u.uBrightness.value = values.brightness
+      u.uJitter.value = values.jitter
       u.uColorA.value.set(values.colorA)
       u.uColorB.value.set(values.colorB)
       // Фигура медленно вращается, когда собрана; мышь наклоняет.
-      group.rotation.y = morphValue * time * 0.25 + pointer.x * 0.4 * pointer.active
-      group.rotation.x = -pointer.y * 0.3 * pointer.active
+      group.rotation.y = morphValue * time * 0.25 * values.spin + pointer.x * 0.4 * values.mouseTilt * pointer.active
+      group.rotation.x = -pointer.y * 0.3 * values.mouseTilt * pointer.active
     },
     set(next) {
       scene.background.set(next.background)

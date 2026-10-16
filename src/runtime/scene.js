@@ -268,7 +268,7 @@ function makeHelpers(THREE) {
         g.fillText(text, size / 2, size / 2)
       }
     },
-    /** Точки на поверхности фигуры: sphere | torus | cube | wave. */
+    /** Точки на поверхности фигуры: sphere | torus | cube | wave | helix. */
     shape(kind, count, radius = 1.6) {
       const out = new Float32Array(count * 3)
       for (let i = 0; i < count; i++) {
@@ -289,6 +289,14 @@ function makeHelpers(THREE) {
           const b = (Math.random() * 2 - 1) * radius * 0.75
           const s = (face % 2 ? 1 : -1) * radius * 0.75
           ;[x, y, z] = face < 2 ? [s, a, b] : face < 4 ? [a, s, b] : [a, b, s]
+        } else if (kind === 'helix') {
+          // Двойная спираль: две нити, повернутые на 180°, плюс разброс по сечению.
+          const t = Math.random() * 2 - 1
+          const a = t * Math.PI * 4 + (Math.random() < 0.5 ? 0 : Math.PI)
+          const spread = 0.12 * radius
+          x = Math.cos(a) * radius * 0.55 + (Math.random() - 0.5) * spread
+          z = Math.sin(a) * radius * 0.55 + (Math.random() - 0.5) * spread
+          y = t * radius * 1.3
         } else if (kind === 'wave') {
           x = (Math.random() * 2 - 1) * radius * 1.4
           z = (Math.random() * 2 - 1) * radius * 1.4

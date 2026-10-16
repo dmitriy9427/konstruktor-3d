@@ -22,6 +22,7 @@ const trigger = (): SelectParam => ({
 const pattern = (value: string): SelectParam => ({
   type: 'select',
   label: 'Откуда горит',
+  hint: 'Откуда начинает гореть секция: очаги, по всей площади, снизу, сверху или от центра',
   options: [
     { value: 'points', label: 'Очаги' },
     { value: 'noise', label: 'Везде' },
@@ -36,18 +37,18 @@ function params(d: { pattern: string; points: number; scale: number; roughness: 
   return {
     trigger: trigger(),
     pattern: pattern(d.pattern),
-    points: { type: 'number', label: 'Очагов', min: 1, max: 12, step: 1, default: d.points },
-    scale: { type: 'number', label: 'Масштаб шума', min: 0.5, max: 10, step: 0.1, default: d.scale },
-    roughness: { type: 'number', label: 'Рваность края', min: 0, max: 1, step: 0.01, default: d.roughness },
-    edge: { type: 'number', label: 'Ширина края', min: 0, max: 0.12, step: 0.002, default: d.edge },
-    glow: { type: 'number', label: 'Свечение', min: 0, max: 2, step: 0.01, default: d.glow },
-    char: { type: 'number', label: 'Копоть', min: 0, max: 1, step: 0.01, default: d.char },
-    ash: { type: 'number', label: 'Пепел', min: 0, max: 1.5, step: 0.01, default: d.ash },
+    points: { type: 'number', label: 'Очагов', min: 1, max: 12, step: 1, default: d.points, hint: 'Сколько очагов, из которых растёт прогорание' },
+    scale: { type: 'number', label: 'Масштаб шума', min: 0.5, max: 10, step: 0.1, default: d.scale, hint: 'Размер узора прогорания: больше значение — мельче' },
+    roughness: { type: 'number', label: 'Рваность края', min: 0, max: 1, step: 0.01, default: d.roughness, hint: 'Рваность края: 0 — ровный, 1 — сильно изъеден' },
+    edge: { type: 'number', label: 'Ширина края', min: 0, max: 0.12, step: 0.002, default: d.edge, hint: 'Ширина светящейся кромки на границе прогорания' },
+    glow: { type: 'number', label: 'Свечение', min: 0, max: 2, step: 0.01, default: d.glow, hint: 'Сила свечения кромки' },
+    char: { type: 'number', label: 'Копоть', min: 0, max: 1, step: 0.01, default: d.char, hint: 'Насколько край темнеет от копоти' },
+    ash: { type: 'number', label: 'Пепел', min: 0, max: 1.5, step: 0.01, default: d.ash, hint: 'Сколько пепла летит над краем' },
     duration: { type: 'number', label: 'Длительность, с', min: 0.3, max: 6, step: 0.1, default: 1.8, hint: 'Для «Появления» и «Из кода»' },
-    seed: { type: 'number', label: 'Вариант узора', min: 1, max: 99, step: 1, default: 7 },
-    hot: { type: 'color', label: 'Жар', default: d.hot },
-    ember: { type: 'color', label: 'Пламя', default: d.ember },
-    soot: { type: 'color', label: 'Копоть', default: d.soot },
+    seed: { type: 'number', label: 'Вариант узора', min: 1, max: 99, step: 1, default: 7, hint: 'Номер варианта узора: разные числа дают разные рисунки прогорания' },
+    hot: { type: 'color', label: 'Жар', default: d.hot, hint: 'Цвет самой горячей части кромки' },
+    ember: { type: 'color', label: 'Пламя', default: d.ember, hint: 'Цвет пламени' },
+    soot: { type: 'color', label: 'Копоть', default: d.soot, hint: 'Цвет копоти' },
   }
 }
 

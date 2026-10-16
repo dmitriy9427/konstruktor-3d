@@ -30,7 +30,8 @@ export function mountPerf(parent: HTMLElement = document.body) {
     position: inBody ? 'fixed' : 'absolute',
     right: inBody ? '12px' : '28px',
     [inBody ? 'bottom' : 'top']: inBody ? '12px' : '28px',
-    zIndex: '9999',
+    // На странице — поверх всего; в Студии — ниже окна «Забрать код» (у него z-index 50).
+    zIndex: inBody ? '9999' : '40',
     minWidth: '180px',
     padding: '10px 12px',
     borderRadius: '12px',

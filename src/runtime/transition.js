@@ -1,23 +1,23 @@
 /**
- * Переходы между секциями: «прожигание», растворение, шторка — без WebGL.
+ * Переходы между секциями: «прожигание», растворение, шторка.
  *
  * Как и runtime.js, файл самодостаточен: Студия вставляет его текст в экспорт.
  *
- * Главная идея — секция остаётся НАСТОЯЩЕЙ (текст, ссылки, видео работают),
- * а дыры в ней прожигает SVG-фильтр (CSS filter: url(#…)):
+ * Главная идея — секция остаётся НАСТОЯЩЕЙ (текст, ссылки, видео работают):
  *
  *   1. Один раз считаем «поле времени»: для каждой точки секции — число 0…1,
  *      КОГДА она прогорит. Точки около очагов — раньше, дальние — позже,
  *      плюс шум, чтобы фронт был рваным. Поле выравниваем по рангу:
  *      прогресс 0.3 = прогорело ровно 30 % площади.
- *   2. Поле — это картинка (серый PNG). Фильтр берёт её (feImage) и для
- *      текущего прогресса p оставляет секцию только там, где поле > p.
- *      Полоски поля чуть больше p — это тлеющий край: жёлтый, оранжевый,
- *      обугленный, со свечением.
- *   3. Каждый кадр меняются только четыре числа в фильтре (intercept) —
- *      картинка поля не пересчитывается.
- *   4. Пепел — частицы на лёгком 2D-холсте поверх страницы. Где их рождать,
- *      знаем точно: клетки поля со значением около p — это и есть горящий край.
+ *   2. ДЫРЫ режет минимальный SVG-фильтр (CSS filter: url(#…)) из трёх шагов:
+ *      картинка поля → порог → «секция там, где поле больше порога».
+ *      Каждый кадр меняется одно число. Это дёшево даже на ретине.
+ *   3. ОГОНЬ (жёлтый и оранжевый край), копоть, свечение и пепел рисует
+ *      один WebGL-холст поверх секции — шейдер читает то же поле, поэтому
+ *      огонь ложится ровно по краю дыр. Почему не тем же фильтром: каждый
+ *      полноэкранный слой SVG-фильтра на ретине стоит десятки миллисекунд
+ *      (замеры — docs/11-transitions.md), а шейдер рисует всё за один проход.
+ *   4. Пепел рождается там, где поле около порога, — это и есть горящий край.
  *
  * Запуск (trigger):
  *   scroll — прогресс привязан к прокрутке (секция в «липком» стеке);
@@ -135,10 +135,80 @@ const node = (name, attrs = {}, children = []) => {
 }
 
 /**
+ * Шейдер огня: для каждого пикселя поверх секции берём значение поля f и
+ * сравниваем с порогом t. d = f − t: меньше нуля — дыра, чуть больше — горит.
+ */
+const EMBER_VERTEX = `#version 300 es
+in vec2 aPos;
+void main() { gl_Position = vec4(aPos, 0.0, 1.0); }`
+
+const EMBER_FRAGMENT = `#version 300 es
+precision highp float;
+uniform sampler2D uField;
+uniform vec4 uRect;        // секция в пикселях холста: x, y (снизу), ширина, высота
+uniform float uT;          // порог
+uniform float uEdge;       // ширина огненного края (в долях поля)
+uniform float uChar;
+uniform float uGlow;
+uniform float uTime;
+uniform vec3 uHot;
+uniform vec3 uEmber;
+uniform vec3 uSoot;
+out vec4 fragColor;
+float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+void main() {
+  vec2 uv = (gl_FragCoord.xy - uRect.xy) / uRect.zw;
+  if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) discard;
+  float f = texture(uField, vec2(uv.x, 1.0 - uv.y)).r;
+  float d = f - uT;
+  float aa = fwidth(f) * 1.5 + 1e-4;           // сглаживание края в один пиксель
+  float e = max(uEdge, 1e-4);
+  // Мерцание жара: шум, который меняется во времени.
+  float flicker = 0.8 + 0.2 * hash(floor(gl_FragCoord.xy / 3.0) + floor(uTime * 12.0));
+  vec4 col = vec4(0.0);
+  // Копоть: от края огня внутрь секции, темнеет к огню.
+  float soot = (1.0 - smoothstep(e, e * 3.5, d)) * smoothstep(-aa, aa, d - e * 0.5) * uChar;
+  col = vec4(uSoot, 1.0) * soot * 0.9;
+  // Огненный край: жёлтый у самой дыры → оранжевый → копоть.
+  float band = smoothstep(-aa, aa, d) * (1.0 - smoothstep(e - aa, e + aa, d));
+  vec3 fire = mix(uHot, uEmber, smoothstep(0.0, e, d)) * flicker;
+  col = mix(col, vec4(fire, 1.0), band * step(0.0001, uEdge));
+  // Свечение: и в дыру, и на секцию. Цвет без альфы — складывается со всем, что под ним.
+  // В сторону дыры гаснет вдвое быстрее — открывшаяся секция остаётся чистой.
+  float glow = exp(-(d < 0.0 ? -d * 2.2 : d) / (e * 1.6 + 0.004)) * uGlow * 0.5;
+  col.rgb += uEmber * glow * flicker;
+  fragColor = col;
+}`
+
+const ASH_VERTEX = `#version 300 es
+in vec4 aParticle;   // x, y (пиксели холста, y снизу), жизнь, размер
+uniform vec2 uCanvas;
+out float vLife;
+void main() {
+  gl_Position = vec4(aParticle.xy / uCanvas * 2.0 - 1.0, 0.0, 1.0);
+  gl_PointSize = aParticle.w;
+  vLife = aParticle.z;
+}`
+
+const ASH_FRAGMENT = `#version 300 es
+precision highp float;
+uniform vec3 uHot;
+uniform vec3 uEmber;
+in float vLife;
+out vec4 fragColor;
+void main() {
+  float d = length(gl_PointCoord - 0.5);
+  float a = (1.0 - smoothstep(0.2, 0.5, d)) * min(1.0, vLife * 1.6);
+  // Цвет: жёлтый → оранжевый → серый пепел.
+  vec3 c = vLife > 0.6 ? mix(uEmber, uHot, (vLife - 0.6) / 0.4) : mix(vec3(0.35, 0.33, 0.31), uEmber, vLife / 0.6);
+  fragColor = vec4(c * a, a);
+}`
+
+/**
  * Запустить переход на элементе.
  * @param {HTMLElement} el — секция, которая прогорит (за ней видно то, что под ней)
  * @param {Record<string, unknown>} values — параметры вида (см. DEFAULTS)
- * @param {object} [options] — { trigger, duration, scroller, once, onComplete }
+ * @param {object} [options] — { trigger, duration, scroller, stack, once, onComplete }
  */
 export function createTransition(el, values = {}, options = {}) {
   const v = { ...DEFAULTS, ...values }
@@ -147,66 +217,31 @@ export function createTransition(el, values = {}, options = {}) {
   const id = `k3d-burn-${++uid}`
   const stats = { name: v.name ?? 'переход', fps: 0, cpuMs: 0, gpuMs: null, dpr: 1, drawCalls: 0, width: 0, height: 0 }
 
-  // ─── Поле и фильтр ────────────────────────────────────────────────────────
+  // ─── Поле ─────────────────────────────────────────────────────────────────
   const rect0 = el.getBoundingClientRect()
   const fw = 256
   const fh = Math.max(48, Math.min(512, Math.round(fw / Math.max(0.2, (rect0.width || 16) / (rect0.height || 9)))))
   const field = buildField(fw, fh, v)
+  const edge = Math.max(0, v.edge)
+  // Запас: при p = 0 порог чуть меньше нуля (ничего не горит), при p = 1 прогорают и края.
+  const tail = edge * 3.5 + 0.01
+  const threshold = (p) => -0.01 + p * (1 + tail + 0.01)
 
-  // Ширина тлеющего края в долях поля и «запас», чтобы при p=0 не было дыр,
-  // а при p=1 прогорели и края.
-  const edge = Math.max(0.002, v.edge)
-  const tail = edge * 3 + 0.01
+  // ─── Дыры: минимальный SVG-фильтр ─────────────────────────────────────────
   const slope = 1 / Math.max(0.0015, v.softness)
-
   const image = node('feImage', { x: 0, y: 0, preserveAspectRatio: 'none', result: 'img' })
   const href = fieldToImage(field)
   image.setAttribute('href', href)
   image.setAttributeNS('http://www.w3.org/1999/xlink', 'xlink:href', href)
-  const ramp = (result) => {
-    const fn = node('feFuncA', { type: 'linear', slope, intercept: 0 })
-    return { fn, el: node('feComponentTransfer', { in: 'field', result }, [fn]) }
-  }
-  const keep = ramp('keep')
-  const hot = ramp('hotEnd')
-  const ember = ramp('emberEnd')
-  // Копоть: градиент — у края темно, дальше светлеет (наклон отрицательный).
-  const charFn = node('feFuncA', { type: 'linear', slope: 0, intercept: 0 })
-  const char = { fn: charFn, el: node('feComponentTransfer', { in: 'field', result: 'charGrad' }, [charFn]) }
-  const blur = node('feGaussianBlur', { in: 'edge', stdDeviation: 0, result: 'glow' })
-  const flood = (color, opacity, result) => node('feFlood', { 'flood-color': color, 'flood-opacity': opacity, result })
-  const minus = (a, b, result) => node('feComposite', { in: a, in2: b, operator: 'arithmetic', k1: 0, k2: 1, k3: -1, k4: 0, result })
-  const inside = (a, b, result) => node('feComposite', { in: a, in2: b, operator: 'in', result })
+  const keep = node('feFuncA', { type: 'linear', slope, intercept: 0 })
   const filter = node(
     'filter',
     { id, filterUnits: 'userSpaceOnUse', primitiveUnits: 'userSpaceOnUse', x: 0, y: 0, 'color-interpolation-filters': 'sRGB' },
     [
       image,
       node('feColorMatrix', { in: 'img', type: 'luminanceToAlpha', result: 'field' }),
-      keep.el,
-      hot.el,
-      ember.el,
-      char.el,
-      inside('SourceGraphic', 'keep', 'kept'),
-      // Полоски: «ещё есть, но вот-вот прогорит».
-      inside('charGrad', 'keep', 'charBand'),
-      minus('keep', 'emberEnd', 'emberBand'),
-      minus('keep', 'hotEnd', 'hotBand'),
-      flood(v.soot, v.char, 'sootColor'),
-      inside('sootColor', 'charBand', 'soot'),
-      flood(v.ember, 1, 'emberColor'),
-      inside('emberColor', 'emberBand', 'emberLayer'),
-      flood(v.hot, 1, 'hotColor'),
-      inside('hotColor', 'hotBand', 'hotLayer'),
-      node('feMerge', { result: 'edge' }, [node('feMergeNode', { in: 'emberLayer' }), node('feMergeNode', { in: 'hotLayer' })]),
-      blur,
-      // Снизу вверх: свечение (видно и в дырах) → секция → копоть → огненный край.
-      node('feMerge', {}, [
-        node('feMergeNode', { in: 'glow' }),
-        node('feMergeNode', { in: 'kept' }),
-        node('feMergeNode', { in: 'soot' }),
-        node('feMergeNode', { in: 'edge' }),
-      ]),
+      node('feComponentTransfer', { in: 'field', result: 'keep' }, [keep]),
+      node('feComposite', { in: 'SourceGraphic', in2: 'keep', operator: 'in' }),
     ],
   )
   const svg = node('svg', { width: 0, height: 0, 'aria-hidden': 'true', focusable: 'false' }, [node('defs', {}, [filter])])
@@ -214,68 +249,162 @@ export function createTransition(el, values = {}, options = {}) {
   document.body.append(svg)
 
   const resize = () => {
-    const w = el.offsetWidth
-    const h = el.offsetHeight
     for (const target of [filter, image]) {
-      target.setAttribute('width', String(w))
-      target.setAttribute('height', String(h))
+      target.setAttribute('width', String(el.offsetWidth))
+      target.setAttribute('height', String(el.offsetHeight))
     }
-    blur.setAttribute('stdDeviation', String(Math.min(w, h) * 0.012 * v.glow))
-    stats.width = w
-    stats.height = h
+    stats.width = el.offsetWidth
+    stats.height = el.offsetHeight
   }
   const ro = new ResizeObserver(resize)
   ro.observe(el)
   resize()
 
-  // ─── Пепел ────────────────────────────────────────────────────────────────
-  let ash = null
-  const particles = []
-  const ensureAsh = () => {
-    if (ash || v.ash <= 0) return
+  // ─── Огонь и пепел: WebGL-холст поверх секции ─────────────────────────────
+  // Холст кладём в тот же контейнер, сразу ПОСЛЕ секции, и каждый кадр
+  // ставим на её место (с запасом PAD вокруг — для свечения и пепла). Так он в
+  // том же слое, что и секция: окна, шапки и модалки остаются поверх него, а
+  // контейнер с overflow обрезает его вместе с секцией. Создаётся при первом
+  // кадре перехода; нет WebGL2 — переход работает без огня.
+  const PAD = 80
+  const fx = { canvas: null, gl: null, ember: null, ash: null, buffer: null, ashBuffer: null, failed: false }
+  const wantsFx = !reduced && (edge > 0 || v.glow > 0 || v.char > 0 || v.ash > 0)
+  const ensureFx = () => {
+    if (fx.gl || fx.failed || !wantsFx) return Boolean(fx.gl)
     const canvas = document.createElement('canvas')
     canvas.setAttribute('aria-hidden', 'true')
-    Object.assign(canvas.style, { position: 'fixed', inset: '0', width: '100%', height: '100%', pointerEvents: 'none', zIndex: '2147483000' })
-    document.body.append(canvas)
-    ash = { canvas, ctx: canvas.getContext('2d') }
+    const parent = el.parentElement ?? document.body
+    if (getComputedStyle(parent).position === 'static') parent.style.position = 'relative'
+    const z = getComputedStyle(el).zIndex
+    // max-width: none — частый сброс стилей «canvas { max-width: 100% }» сжал бы холст,
+    // и огонь съехал бы с края дыр (холст шире секции на PAD с каждой стороны).
+    Object.assign(canvas.style, { position: 'absolute', left: '0', top: '0', maxWidth: 'none', maxHeight: 'none', pointerEvents: 'none', zIndex: z === 'auto' ? '' : z })
+    const gl = canvas.getContext('webgl2', { premultipliedAlpha: true, alpha: true, antialias: false })
+    if (!gl) {
+      fx.failed = true
+      return false
+    }
+    el.after(canvas)
+    const program = (vs, fs) => {
+      const p = gl.createProgram()
+      for (const [type, src] of [[gl.VERTEX_SHADER, vs], [gl.FRAGMENT_SHADER, fs]]) {
+        const sh = gl.createShader(type)
+        gl.shaderSource(sh, src)
+        gl.compileShader(sh)
+        if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error(`Ошибка шейдера перехода: ${gl.getShaderInfoLog(sh)}`)
+        gl.attachShader(p, sh)
+        gl.deleteShader(sh)
+      }
+      gl.bindAttribLocation(p, 0, vs.includes('aPos') ? 'aPos' : 'aParticle')
+      gl.linkProgram(p)
+      const loc = new Map()
+      return { p, u: (name) => (loc.has(name) ? loc.get(name) : loc.set(name, gl.getUniformLocation(p, name)).get(name)) }
+    }
+    fx.ember = program(EMBER_VERTEX, EMBER_FRAGMENT)
+    fx.ash = program(ASH_VERTEX, ASH_FRAGMENT)
+    fx.buffer = gl.createBuffer()
+    gl.bindBuffer(gl.ARRAY_BUFFER, fx.buffer)
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW)
+    fx.ashBuffer = gl.createBuffer()
+    // Поле — текстура из одного канала (те же ранги, что и в картинке фильтра).
+    const bytes = new Uint8Array(field.rank.length)
+    for (let i = 0; i < bytes.length; i++) bytes[i] = Math.round(field.rank[i] * 255)
+    fx.texture = gl.createTexture()
+    gl.bindTexture(gl.TEXTURE_2D, fx.texture)
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1)
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, field.width, field.height, 0, gl.RED, gl.UNSIGNED_BYTE, bytes)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+    fx.canvas = canvas
+    fx.gl = gl
+    return true
   }
   const hotRgb = hex(v.hot)
   const emberRgb = hex(v.ember)
-  const spawn = (count, p) => {
-    if (!count) return
-    ensureAsh()
-    const r = el.getBoundingClientRect()
+  const sootRgb = hex(v.soot)
+  const particles = []
+  let visualTime = 0
+
+  const spawn = (count, t) => {
+    if (!count || v.ash <= 0) return
+    // Частицы живут в координатах секции (px от её левого верхнего угла) — едут вместе с ней.
+    const r = { width: el.offsetWidth, height: el.offsetHeight }
     const n = field.order.length
-    const from = Math.floor(Math.max(0, p) * (n - 1))
-    const to = Math.min(n - 1, from + Math.max(1, Math.floor(edge * n)))
+    const from = Math.floor(Math.min(1, Math.max(0, t)) * (n - 1))
+    const to = Math.min(n - 1, from + Math.max(1, Math.floor(Math.max(edge, 0.01) * n)))
     for (let i = 0; i < count && particles.length < 900; i++) {
       const cell = field.order[from + Math.floor(Math.random() * (to - from + 1))]
       const cx = ((cell % field.width) + Math.random()) / field.width
       const cy = (Math.floor(cell / field.width) + Math.random()) / field.height
       particles.push({
-        x: r.left + cx * r.width,
-        y: r.top + cy * r.height,
+        x: cx * r.width,
+        y: cy * r.height,
         vx: (Math.random() - 0.5) * 30,
         vy: -20 - Math.random() * 60,
         life: 1,
         decay: 0.5 + Math.random() * 0.9,
-        size: 0.6 + Math.random() * 2.2,
+        size: 1.2 + Math.random() * 4,
         spin: Math.random() * 6.28,
       })
     }
   }
-  const stepAsh = (dt) => {
-    if (!ash) return
-    const { canvas, ctx } = ash
+
+  const drawFx = (dt) => {
+    const active = current > 0 && current < 1
+    if (!active && !particles.length) {
+      if (fx.canvas) fx.canvas.style.display = 'none'
+      return
+    }
+    if (!ensureFx()) return
+    const { gl, canvas } = fx
+    canvas.style.display = ''
+    // Ставим холст на место секции (у «липкой» секции место меняется при прокрутке).
+    const r = el.getBoundingClientRect()
+    const pr = canvas.parentElement.getBoundingClientRect()
+    const parent = canvas.parentElement
+    const cssW = r.width + PAD * 2
+    const cssH = r.height + PAD * 2
+    canvas.style.transform = `translate(${r.left - pr.left - parent.clientLeft + parent.scrollLeft - PAD}px, ${r.top - pr.top - parent.clientTop + parent.scrollTop - PAD}px)`
+    canvas.style.width = `${cssW}px`
+    canvas.style.height = `${cssH}px`
     const dpr = Math.min(globalThis.devicePixelRatio || 1, 1.5)
-    const w = Math.round(innerWidth * dpr)
-    const h = Math.round(innerHeight * dpr)
+    const w = Math.round(cssW * dpr)
+    const h = Math.round(cssH * dpr)
     if (canvas.width !== w || canvas.height !== h) {
       canvas.width = w
       canvas.height = h
     }
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-    ctx.clearRect(0, 0, innerWidth, innerHeight)
+    visualTime += dt
+    gl.viewport(0, 0, w, h)
+    gl.clearColor(0, 0, 0, 0)
+    gl.clear(gl.COLOR_BUFFER_BIT)
+    gl.enable(gl.BLEND)
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA)
+    let draws = 0
+    if (active && (edge > 0 || v.glow > 0 || v.char > 0)) {
+      const { p, u } = fx.ember
+      gl.useProgram(p)
+      gl.bindBuffer(gl.ARRAY_BUFFER, fx.buffer)
+      gl.enableVertexAttribArray(0)
+      gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0)
+      gl.activeTexture(gl.TEXTURE0)
+      gl.bindTexture(gl.TEXTURE_2D, fx.texture)
+      gl.uniform1i(u('uField'), 0)
+      gl.uniform4f(u('uRect'), PAD * dpr, PAD * dpr, r.width * dpr, r.height * dpr)
+      gl.uniform1f(u('uT'), threshold(current))
+      gl.uniform1f(u('uEdge'), edge)
+      gl.uniform1f(u('uChar'), v.char)
+      gl.uniform1f(u('uGlow'), v.glow)
+      gl.uniform1f(u('uTime'), visualTime)
+      gl.uniform3f(u('uHot'), ...hotRgb)
+      gl.uniform3f(u('uEmber'), ...emberRgb)
+      gl.uniform3f(u('uSoot'), ...sootRgb)
+      gl.drawArrays(gl.TRIANGLES, 0, 3)
+      draws++
+    }
+    // Пепел: позиции считаем на процессоре (их не больше 900), рисуем точками.
     for (let i = particles.length - 1; i >= 0; i--) {
       const q = particles[i]
       q.life -= q.decay * dt
@@ -288,17 +417,24 @@ export function createTransition(el, values = {}, options = {}) {
       q.vy -= 30 * dt // тёплый воздух поднимает пепел
       q.x += q.vx * dt
       q.y += q.vy * dt
-      // Цвет: жёлтый → оранжевый → серый пепел.
-      const t = q.life
-      const c = t > 0.6 ? mixRgb(emberRgb, hotRgb, (t - 0.6) / 0.4) : mixRgb([90, 84, 80], emberRgb, t / 0.6)
-      ctx.globalAlpha = Math.min(1, t * 1.6)
-      ctx.fillStyle = `rgb(${c[0]},${c[1]},${c[2]})`
-      ctx.beginPath()
-      ctx.arc(q.x, q.y, q.size, 0, 6.2832)
-      ctx.fill()
     }
-    ctx.globalAlpha = 1
-    stats.drawCalls = particles.length
+    if (particles.length) {
+      const data = new Float32Array(particles.length * 4)
+      particles.forEach((q, i) => data.set([(q.x + PAD) * dpr, (cssH - q.y - PAD) * dpr, q.life, q.size * dpr], i * 4))
+      const { p, u } = fx.ash
+      gl.useProgram(p)
+      gl.bindBuffer(gl.ARRAY_BUFFER, fx.ashBuffer)
+      gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW)
+      gl.enableVertexAttribArray(0)
+      gl.vertexAttribPointer(0, 4, gl.FLOAT, false, 0, 0)
+      gl.uniform2f(u('uCanvas'), w, h)
+      gl.uniform3f(u('uHot'), ...hotRgb)
+      gl.uniform3f(u('uEmber'), ...emberRgb)
+      gl.drawArrays(gl.POINTS, 0, particles.length)
+      draws++
+    }
+    stats.drawCalls = draws
+    stats.dpr = dpr
   }
 
   // ─── Прогресс ─────────────────────────────────────────────────────────────
@@ -326,24 +462,17 @@ export function createTransition(el, values = {}, options = {}) {
     }
     el.style.visibility = ''
     el.style.filter = `url(#${id})`
-    // Порог поля: при p=0 — чуть меньше нуля (ничего не горит), при p=1 — с запасом на края.
-    const t = -0.01 + p * (1 + tail + 0.01)
-    keep.fn.setAttribute('intercept', String(-slope * t))
-    hot.fn.setAttribute('intercept', String(-slope * (t + edge * 0.35)))
-    ember.fn.setAttribute('intercept', String(-slope * (t + edge)))
-    // Копоть: 1 на линии огня, 0 через 2.5 ширины края.
-    const span = edge * 2.5
-    char.fn.setAttribute('slope', String(-1 / span))
-    char.fn.setAttribute('intercept', String((t + edge + span) / span))
-    spawn(Math.round(delta * 1400 * v.ash), t)
+    keep.setAttribute('intercept', String(-slope * threshold(p)))
+    spawn(Math.round(delta * 1400 * v.ash), threshold(p))
   }
 
-  // ─── Цикл кадров: анимация play/reverse и пепел ──────────────────────────
+  // ─── Цикл кадров ──────────────────────────────────────────────────────────
   let raf = 0
   let last = 0
   let target = null // куда едет анимация: 0 или 1
   let animFrom = 0
   let animStart = 0
+  let destroyed = false
   const ease = (x) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2)
   const loop = (now) => {
     raf = 0
@@ -361,11 +490,12 @@ export function createTransition(el, values = {}, options = {}) {
       }
     }
     // Пока край горит — понемногу искрит и без движения.
-    if (current > 0 && current < 1 && v.ash > 0) spawn(Math.random() < v.ash * 0.5 ? 1 : 0, -0.01 + current * (1 + tail + 0.01))
-    stepAsh(dt)
+    if (current > 0 && current < 1 && Math.random() < v.ash * 0.5) spawn(1, threshold(current))
+    drawFx(dt)
     stats.cpuMs = performance.now() - cpu
     stats.fps = Math.round(1 / dt)
-    if (target !== null || particles.length || (current > 0 && current < 1 && v.ash > 0 && opts.trigger !== 'scroll')) wake()
+    // Кадры нужны, пока идёт анимация, летит пепел или мерцает огонь.
+    if (target !== null || particles.length || (current > 0 && current < 1 && wantsFx)) wake()
     else last = 0
   }
   const wake = () => {
@@ -379,7 +509,6 @@ export function createTransition(el, values = {}, options = {}) {
   }
 
   // ─── Триггеры ─────────────────────────────────────────────────────────────
-  let destroyed = false
   let io = null
   let onScroll = null
   const scroller = opts.scroller
@@ -414,6 +543,7 @@ export function createTransition(el, values = {}, options = {}) {
           // Ушла с экрана — вернём, чтобы при следующем появлении сгорела снова.
           target = null
           apply(0)
+          wake()
         }
       },
       { root: scroller, threshold: [0, v.threshold] },
@@ -455,7 +585,15 @@ export function createTransition(el, values = {}, options = {}) {
       }
       registry.delete(stats)
       svg.remove()
-      ash?.canvas.remove()
+      if (fx.gl) {
+        fx.gl.deleteTexture(fx.texture)
+        fx.gl.deleteBuffer(fx.buffer)
+        fx.gl.deleteBuffer(fx.ashBuffer)
+        fx.gl.deleteProgram(fx.ember.p)
+        fx.gl.deleteProgram(fx.ash.p)
+        fx.gl.getExtension('WEBGL_lose_context')?.loseContext()
+      }
+      fx.canvas?.remove()
       el.style.filter = ''
       el.style.visibility = ''
       el.style.opacity = ''
@@ -482,12 +620,9 @@ export const DEFAULTS = {
   threshold: 0.5,
 }
 
+/** '#ff8800' → [1, 0.53, 0] (для uniform). */
 function hex(color) {
   const h = String(color).replace('#', '')
   const n = parseInt(h.length === 3 ? h.replace(/./g, '$&$&') : h, 16)
-  return [(n >> 16) & 255, (n >> 8) & 255, n & 255]
-}
-
-function mixRgb(a, b, t) {
-  return [0, 1, 2].map((i) => Math.round(a[i] + (b[i] - a[i]) * t))
+  return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255]
 }

@@ -51,6 +51,12 @@ for (const effect of EFFECTS) {
       const h = await demo.evaluate((d) => d.clientHeight)
       await demo.evaluate((d, y) => d.scrollTo(0, y), 0.7 * h + h)
       await expect(cover).toHaveCSS('filter', /url/)
+      // Холст огня лежит ровно на секции (+80 px запаса с каждой стороны): его не сжал
+      // сброс стилей «canvas { max-width: 100% }» Студии.
+      if (await cover.evaluate((el) => el.nextElementSibling?.tagName === 'CANVAS')) {
+        const [a, c] = await cover.evaluate((el) => [el.getBoundingClientRect().width, el.nextElementSibling!.getBoundingClientRect().width])
+        expect(Math.round(c - a)).toBe(160)
+      }
       await demo.evaluate((d, y) => d.scrollTo(0, y), 0.7 * h + 2.2 * h)
       await expect(cover).toHaveCSS('visibility', 'hidden')
       await demo.evaluate((d) => d.scrollTo(0, 0))
