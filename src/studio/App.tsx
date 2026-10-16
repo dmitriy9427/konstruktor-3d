@@ -26,6 +26,9 @@ export function App() {
   const [values, setValues] = useState<Values>(initial.values)
   const [common, setCommon] = useState<Common>(initial.common)
   const [image, setImage] = useState(DEMO_IMAGE)
+  // Рисование точек в превью (параметр типа «points»): какой параметр рисуем и начать ли новую линию.
+  const [drawing, setDrawing] = useState<string | null>(null)
+  const [newStroke, setNewStroke] = useState(false)
   const [codeOpen, setCodeOpen] = useState(false)
   const [perf, setPerf] = useState(import.meta.env.DEV)
   const effect = effectById(effectId)!
@@ -49,6 +52,7 @@ export function App() {
   useEffect(() => () => void (image.startsWith('blob:') && URL.revokeObjectURL(image)), [image])
 
   const choose = (id: string) => {
+    setDrawing(null)
     const next = effectById(id)!
     setEffectId(id)
     setValues(resolveValues(next.params))
@@ -104,7 +108,22 @@ export function App() {
       </nav>
 
       <main ref={stage} className="stage">
-        <Preview effect={effect} values={values} common={common} image={image} />
+        <Preview
+          effect={effect}
+          values={values}
+          common={common}
+          image={image}
+          drawing={drawing !== null}
+          onPick={(x, y) => {
+            if (!drawing) return
+            setValues((prev) => {
+              const current = String(prev[drawing] ?? '')
+              const point = `${x.toFixed(3)},${y.toFixed(3)},${newStroke || !current ? 0 : 1}`
+              return { ...prev, [drawing]: current ? `${current};${point}` : point }
+            })
+            setNewStroke(false)
+          }}
+        />
         <div className="stage__caption">
           <h1>{effect.name}</h1>
           <p>{effect.description}</p>
@@ -139,7 +158,21 @@ export function App() {
 
         <h3 className="panel__subtitle">Эффект</h3>
         {Object.entries(effect.params).map(([key, param]) => (
-          <ParamControl key={`${effectId}-${key}`} name={key} param={param} value={values[key]} onChange={(v) => setValues((prev) => ({ ...prev, [key]: v }))} />
+          <ParamControl
+            key={`${effectId}-${key}`}
+            name={key}
+            param={param}
+            value={values[key]}
+            onChange={(v) => setValues((prev) => ({ ...prev, [key]: v }))}
+            drawing={drawing === key}
+            newStroke={newStroke}
+            onDraw={(on) => {
+              setDrawing(on ? key : null)
+              setNewStroke(false)
+              if (on && param.type === 'points' && param.enable) setValues((prev) => ({ ...prev, ...param.enable }))
+            }}
+            onNewStroke={() => setNewStroke(true)}
+          />
         ))}
 
         {(effect.kind === 'image' || effect.kind === 'css' || effect.kind === 'slides') && (

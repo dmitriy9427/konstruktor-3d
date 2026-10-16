@@ -257,3 +257,17 @@ test('страница Студии не прокручивается, подс�
   const [r, t] = await Promise.all([row.boundingBox(), tip.boundingBox()])
   expect(Math.abs(t!.y + t!.height / 2 - (r!.y + r!.height / 2))).toBeLessThan(120)
 })
+
+test('«Космос»: своё созвездие рисуется кликами по превью и попадает в адрес', async ({ page }) => {
+  await page.goto('studio.html?e=space')
+  const ctl = page.locator('.control', { hasText: 'Своё созвездие' })
+  await ctl.getByRole('button', { name: 'Очистить' }).click()
+  await ctl.getByRole('button', { name: 'Рисовать' }).click()
+  const box = (await page.locator('.preview').boundingBox())!
+  for (const [x, y] of [[0.3, 0.3], [0.5, 0.6], [0.7, 0.3]]) await page.mouse.click(box.x + box.width * x, box.y + box.height * y)
+  await expect(ctl.locator('output')).toHaveText('3 / 32')
+  await expect(page).toHaveURL(/constellations=custom/)
+  await expect(page).toHaveURL(/custom=0\.\d+%2C/)
+  await ctl.getByRole('button', { name: 'Готово' }).click()
+  await expect(page.locator('.draw-layer')).toHaveCount(0)
+})

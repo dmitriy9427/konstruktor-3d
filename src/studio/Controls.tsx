@@ -10,7 +10,19 @@ import type { Common } from '../engine/params'
 import type { Param, PostOptions, Values } from '../runtime/runtime'
 import { HintIcon, useHintId, WithHint } from './Hint'
 
-export function ParamControl(props: { name: string; param: Param; value: Values[string]; onChange: (v: Values[string]) => void }) {
+type ParamProps = {
+  name: string
+  param: Param
+  value: Values[string]
+  onChange: (v: Values[string]) => void
+  /** Для параметров «точки»: идёт ли рисование в превью и управление им. */
+  drawing?: boolean
+  newStroke?: boolean
+  onDraw?: (on: boolean) => void
+  onNewStroke?: () => void
+}
+
+export function ParamControl(props: ParamProps) {
   return (
     <WithHint hint={props.param.hint}>
       <ParamInput {...props} />
@@ -18,10 +30,41 @@ export function ParamControl(props: { name: string; param: Param; value: Values[
   )
 }
 
-function ParamInput({ name, param, value, onChange }: { name: string; param: Param; value: Values[string]; onChange: (v: Values[string]) => void }) {
+function ParamInput({ name, param, value, onChange, drawing, newStroke, onDraw, onNewStroke }: ParamProps) {
   const id = useId()
   const described = useHintId()
   switch (param.type) {
+    case 'points': {
+      const points = String(value).split(';').filter(Boolean)
+      return (
+        <div className="control" aria-describedby={described}>
+          <span className="control__label">
+            <span>
+              {param.label}
+              <HintIcon />
+            </span>
+            <output className="control__value">
+              {points.length} / {param.max ?? 32}
+            </output>
+          </span>
+          <div className="points">
+            <button type="button" className={`button button--small${drawing ? ' button--primary' : ''}`} aria-pressed={drawing} onClick={() => onDraw?.(!drawing)}>
+              {drawing ? 'Готово' : 'Рисовать'}
+            </button>
+            <button type="button" className="button button--small" disabled={!drawing || newStroke} onClick={onNewStroke}>
+              Новая линия
+            </button>
+            <button type="button" className="button button--small" disabled={!points.length} onClick={() => onChange(points.slice(0, -1).join(';'))}>
+              Отменить
+            </button>
+            <button type="button" className="button button--small" disabled={!points.length} onClick={() => onChange('')}>
+              Очистить
+            </button>
+          </div>
+          {drawing && <p className="points__help">Кликайте по превью — звёзды соединяются по порядку{newStroke ? '. Следующая начнёт новую линию' : ''}</p>}
+        </div>
+      )
+    }
     case 'number':
       return <Range id={id} label={param.label} min={param.min} max={param.max} step={param.step ?? 0.01} value={Number(value)} onChange={onChange} />
     case 'color':

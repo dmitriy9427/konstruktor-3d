@@ -10,8 +10,17 @@ export type SelectParam = {
   default: string
   hint?: string
 }
+export type PointsParam = {
+  type: 'points'
+  label: string
+  default: string
+  max?: number
+  hint?: string
+  /** Какие параметры переключить, когда начинают рисовать (например, созвездия → «своё»). */
+  enable?: Record<string, string>
+}
 export type TextParam = { type: 'text'; label: string; default: string; maxLength?: number; hint?: string }
-export type Param = NumberParam | ColorParam | BooleanParam | SelectParam | TextParam
+export type Param = NumberParam | ColorParam | BooleanParam | SelectParam | TextParam | PointsParam
 export type Params = Record<string, Param>
 export type Values = Record<string, number | string | boolean>
 
@@ -90,6 +99,7 @@ export const COMMON: string
 export function uniformName(key: string): string
 export function hexToRgb(hex: string): [number, number, number]
 export function uniformValue(param: Param, value: unknown): number | number[]
+export function parsePoints(value: unknown, max?: number): [number, number, number][]
 export function buildSimulation(spec: Pick<EffectSpec, 'params' | 'simulation'>): string
 export function buildFragment(spec: Pick<EffectSpec, 'fragment' | 'params' | 'image'>): string
 export function defaultsOf(params: Params): Values

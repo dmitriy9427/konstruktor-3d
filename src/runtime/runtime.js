@@ -115,6 +115,32 @@ export function hexToRgb(hex) {
 /** GLSL-тип параметра. */
 const glslType = (param) => (param.type === 'color' ? 'vec3' : 'float')
 
+/**
+ * Параметр «точки» (например, своё созвездие): строка «x,y,c;x,y,c…», где x, y —
+ * доли холста (0…1, y вверх), c = 1 — соединить линией с предыдущей точкой.
+ * В шейдере — массив vec3 и число точек: uName[max], uNameCount.
+ */
+export function parsePoints(value, max = 32) {
+  return String(value ?? '')
+    .split(';')
+    .map((s) => s.split(',').map(Number))
+    .filter((p) => p.length >= 2 && p.every(Number.isFinite))
+    .slice(0, max)
+    .map(([x, y, c = 1]) => [Math.min(1, Math.max(0, x)), Math.min(1, Math.max(0, y)), c ? 1 : 0])
+}
+
+/** Объявления uniform для параметров (текст в шейдер не уходит). */
+function declarations(params) {
+  return Object.entries(params)
+    .filter(([, param]) => param.type !== 'text')
+    .map(([key, param]) =>
+      param.type === 'points'
+        ? `uniform vec3 ${uniformName(key)}[${param.max ?? 32}];\nuniform float ${uniformName(key)}Count;`
+        : `uniform ${glslType(param)} ${uniformName(key)};`,
+    )
+    .join('\n')
+}
+
 /** Значение параметра → то, что уходит в uniform. */
 export function uniformValue(param, value) {
   if (param.type === 'color') return hexToRgb(value)
@@ -125,10 +151,7 @@ export function uniformValue(param, value) {
 
 /** Собрать полный текст фрагментного шейдера эффекта. */
 export function buildFragment(spec) {
-  const decls = Object.entries(spec.params)
-    .filter(([, param]) => param.type !== 'text')
-    .map(([key, param]) => `uniform ${glslType(param)} ${uniformName(key)};`)
-    .join('\n')
+  const decls = declarations(spec.params)
   const image = spec.image ? 'uniform sampler2D uImage;\nuniform vec2 uImageRes;\n' : ''
   // Слайды: «откуда» и «куда» + прогресс перехода 0…1 и направление (1 — вперёд, −1 — назад).
   const slides = spec.images
@@ -153,10 +176,7 @@ vec3 toAt(vec2 uv) { return texture(uTo, coverUv(uv, uResolution, uToRes)).rgb; 
  * шага: uClicks[i] = (x, y в долях холста, сила, 0); сила 0 — клика нет.
  */
 export function buildSimulation(spec) {
-  const decls = Object.entries(spec.params)
-    .filter(([, param]) => param.type !== 'text')
-    .map(([key, param]) => `uniform ${glslType(param)} ${uniformName(key)};`)
-    .join('\n')
+  const decls = declarations(spec.params)
   return `#version 300 es\n${COMMON}\n${decls}\nuniform sampler2D uState;\nuniform vec2 uSimRes;\nuniform vec4 uClicks[4];\nuniform float uSimStep;\nout vec4 fragColor;\n${spec.simulation.fragment}`
 }
 
@@ -500,6 +520,15 @@ export function createEffect(canvas, spec, options = {}) {
     gl.uniform1f(program.loc('uScroll'), scrollProgress())
     for (const [key, param] of Object.entries(spec.params)) {
       if (param.type === 'text') continue
+      if (param.type === 'points') {
+        const max = param.max ?? 32
+        const pts = parsePoints(values[key], max)
+        const data = new Float32Array(max * 3)
+        pts.forEach((p, i) => data.set(p, i * 3))
+        gl.uniform3fv(program.loc(`${uniformName(key)}[0]`), data)
+        gl.uniform1f(program.loc(`${uniformName(key)}Count`), pts.length)
+        continue
+      }
       const value = uniformValue(param, values[key])
       if (Array.isArray(value)) gl.uniform3fv(program.loc(uniformName(key)), value)
       else gl.uniform1f(program.loc(uniformName(key)), value)

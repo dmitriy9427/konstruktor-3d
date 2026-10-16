@@ -27,6 +27,13 @@ describe('sanitize', () => {
   })
 })
 
+describe('точки (своё созвездие)', () => {
+  it('разбирает «x,y,c;…», зажимает в 0…1 и отбрасывает мусор', () => {
+    const p = { type: 'points', label: '', default: '', max: 3 } as const
+    expect(sanitize(p, '0.5,0.5,0;2,-1;abc;0.1,0.2,1;0.3,0.3,1')).toBe('0.5,0.5,0;1,0,1;0.1,0.2,1')
+  })
+})
+
 describe('адрес Студии', () => {
   it('туда и обратно — без потерь', () => {
     const values = resolveValues(lava.params, { speed: 1.2, colorA: '#123456' })
