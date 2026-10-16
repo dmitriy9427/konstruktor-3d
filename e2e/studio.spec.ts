@@ -261,8 +261,10 @@ test('страница Студии не прокручивается, подс�
 test('«Космос»: своё созвездие рисуется кликами по превью и попадает в адрес', async ({ page }) => {
   await page.goto('studio.html?e=space')
   const ctl = page.locator('.control', { hasText: 'Своё созвездие' })
-  await ctl.getByRole('button', { name: 'Очистить' }).click()
+  // Без «Очистить»: рисование само начинается с чистого листа и включает видимые линии.
   await ctl.getByRole('button', { name: 'Рисовать' }).click()
+  await expect(ctl.locator('output')).toHaveText('0 / 32')
+  await expect(page).toHaveURL(/constStyle=static/)
   const box = (await page.locator('.preview').boundingBox())!
   for (const [x, y] of [[0.3, 0.3], [0.5, 0.6], [0.7, 0.3]]) await page.mouse.click(box.x + box.width * x, box.y + box.height * y)
   await expect(ctl.locator('output')).toHaveText('3 / 32')

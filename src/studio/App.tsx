@@ -169,7 +169,13 @@ export function App() {
             onDraw={(on) => {
               setDrawing(on ? key : null)
               setNewStroke(false)
-              if (on && param.type === 'points' && param.enable) setValues((prev) => ({ ...prev, ...param.enable }))
+              if (on && param.type === 'points')
+                setValues((prev) => ({
+                  ...prev,
+                  ...param.enable,
+                  // Пример по умолчанию не дорисовываем — начинаем с чистого листа.
+                  [key]: prev[key] === param.default ? '' : prev[key],
+                }))
             }}
             onNewStroke={() => setNewStroke(true)}
           />
