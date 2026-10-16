@@ -18,6 +18,7 @@
     "node": ">=22"
   },
   "dependencies": {
+    "@floating-ui/react-dom": "^2.1.9",
     "@fontsource-variable/jetbrains-mono": "^5.3.0",
     "@fontsource-variable/onest": "^5.3.1",
     "gsap": "^3.15.0",

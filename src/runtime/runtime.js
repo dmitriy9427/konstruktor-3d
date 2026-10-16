@@ -162,6 +162,10 @@ export function createEffect(canvas, spec, options = {}) {
     adaptive: true,
     reducedMotion: typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches,
     pauseOffscreen: true,
+    /** Засыпать через столько секунд без действий пользователя (0 — никогда). */
+    sleepAfter: 0,
+    /** Не больше стольких кадров в секунду (0 — сколько даёт экран). */
+    maxFps: 0,
     ...options,
     post: { ...DEFAULT_POST, ...options.post },
   }
@@ -314,6 +318,19 @@ export function createEffect(canvas, spec, options = {}) {
   globalThis.addEventListener?.('pointermove', onMove, { passive: true })
   document.addEventListener('pointerleave', onLeave)
 
+  // ─── Экономия: засыпание без действий пользователя ───────────────────────
+  // Мышь, прокрутка, клавиши, касания — «пользователь здесь». Если ничего не было
+  // sleepAfter секунд, кадры перестают рисоваться; любое действие будит эффект.
+  let lastActivity = performance.now()
+  const onActivity = () => {
+    const wasAsleep = !awake()
+    lastActivity = performance.now()
+    if (wasAsleep) requestDraw()
+  }
+  const awake = () => !opts.sleepAfter || performance.now() - lastActivity < opts.sleepAfter * 1000
+  const ACTIVITY_EVENTS = ['pointermove', 'pointerdown', 'wheel', 'scroll', 'keydown', 'touchstart']
+  for (const name of ACTIVITY_EVENTS) globalThis.addEventListener?.(name, onActivity, { passive: true, capture: true })
+
   const scrollProgress = () => {
     const rect = canvas.getBoundingClientRect()
     const vh = globalThis.innerHeight || 1
@@ -336,7 +353,8 @@ export function createEffect(canvas, spec, options = {}) {
   let query = null
 
   // Слайдеру кадры нужны только во время перехода (и для автопрокрутки).
-  const running = () => !destroyed && visible && !paused && !opts.reducedMotion && (!slideCount || slide.active || Number(values.autoplay) > 0)
+  const onScreen = () => visible || !opts.pauseOffscreen
+  const running = () => !destroyed && onScreen() && awake() && !paused && !opts.reducedMotion && (!slideCount || slide.active || Number(values.autoplay) > 0)
 
   function requestDraw() {
     if (!frame && !destroyed) frame = requestAnimationFrame(tick)
@@ -345,11 +363,18 @@ export function createEffect(canvas, spec, options = {}) {
   function tick(now) {
     frame = 0
     if (destroyed) return
+    // Потолок FPS: рано для нового кадра — ждём следующего обновления экрана.
+    if (opts.maxFps > 0 && last && now - last < 1000 / opts.maxFps - 2) {
+      frame = requestAnimationFrame(tick)
+      return
+    }
     const dt = last ? Math.min((now - last) / 1000, 0.1) : 1 / 60
     last = now
     const cpuStart = performance.now()
 
-    if (!opts.reducedMotion && !paused) time += dt
+    // Время идёт, только пока анимация запущена: разовая перерисовка (размер,
+    // новые параметры) у спящего или стоящего эффекта не сдвигает кадр.
+    if (running()) time += dt
     if (slide.active) {
       slide.progress = Math.min(1, slide.progress + dt / Math.max(0.05, Number(values.duration ?? 1.2)))
       if (slide.progress >= 1) {
@@ -478,7 +503,7 @@ export function createEffect(canvas, spec, options = {}) {
   const ro = new ResizeObserver(resize)
   ro.observe(canvas)
   let io = null
-  if (opts.pauseOffscreen && typeof IntersectionObserver === 'function') {
+  if (typeof IntersectionObserver === 'function') {
     io = new IntersectionObserver(([entry]) => {
       visible = entry.isIntersecting
       if (visible) requestDraw()
@@ -541,6 +566,7 @@ export function createEffect(canvas, spec, options = {}) {
       io?.disconnect()
       globalThis.removeEventListener?.('pointermove', onMove)
       document.removeEventListener('pointerleave', onLeave)
+      for (const name of ACTIVITY_EVENTS) globalThis.removeEventListener?.(name, onActivity, { capture: true })
       registry.delete(stats)
       gl.deleteProgram(main.program)
       gl.deleteProgram(post.program)

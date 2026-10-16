@@ -13,13 +13,32 @@ export type Common = {
   inertia: number
   /** Потолок плотности пикселей. */
   quality: number
+  /** Пауза, пока эффект за экраном. */
+  offscreen: boolean
+  /** Засыпать через столько секунд без действий пользователя (0 — никогда). */
+  sleep: number
+  /** Потолок кадров в секунду (0 — без лимита). */
+  fps: number
   post: PostOptions
 }
+
+/** Общие настройки → опции рантайма (createEffect / createScene). */
+export const runtimeOptions = (c: Common) => ({
+  mouse: c.mouse,
+  inertia: c.inertia,
+  quality: c.quality,
+  pauseOffscreen: c.offscreen,
+  sleepAfter: c.sleep,
+  maxFps: c.fps,
+})
 
 export const DEFAULT_COMMON: Common = {
   mouse: true,
   inertia: 0.12,
   quality: 1.5,
+  offscreen: true,
+  sleep: 0,
+  fps: 0,
   post: { grain: 0, chroma: 0, vignette: 0, bloom: 0 },
 }
 
@@ -116,6 +135,9 @@ export function toSearch(effectId: string, params: Params, values: Values, commo
   if (common.mouse !== DEFAULT_COMMON.mouse) p.set('_mouse', common.mouse ? '1' : '0')
   if (common.inertia !== DEFAULT_COMMON.inertia) p.set('_inertia', String(common.inertia))
   if (common.quality !== DEFAULT_COMMON.quality) p.set('_quality', String(common.quality))
+  if (common.offscreen !== DEFAULT_COMMON.offscreen) p.set('_offscreen', common.offscreen ? '1' : '0')
+  if (common.sleep !== DEFAULT_COMMON.sleep) p.set('_sleep', String(common.sleep))
+  if (common.fps !== DEFAULT_COMMON.fps) p.set('_fps', String(common.fps))
   for (const key of Object.keys(DEFAULT_COMMON.post) as (keyof PostOptions)[]) {
     if (common.post[key]) p.set(`_${key}`, String(common.post[key]))
   }
@@ -137,6 +159,9 @@ export function fromSearch(search: string, paramsOf: (id: string) => Params | un
     mouse: p.has('_mouse') ? p.get('_mouse') === '1' : DEFAULT_COMMON.mouse,
     inertia: num('_inertia', DEFAULT_COMMON.inertia, 0, 0.6),
     quality: num('_quality', DEFAULT_COMMON.quality, 0.5, 2),
+    offscreen: p.has('_offscreen') ? p.get('_offscreen') === '1' : DEFAULT_COMMON.offscreen,
+    sleep: num('_sleep', DEFAULT_COMMON.sleep, 0, 60),
+    fps: [0, 30, 60].includes(num('_fps', 0, 0, 60)) ? num('_fps', 0, 0, 60) : 0,
     post: {
       grain: num('_grain', 0, 0, 1),
       chroma: num('_chroma', 0, 0, 1),

@@ -30,9 +30,9 @@ describe('sanitize', () => {
 describe('адрес Студии', () => {
   it('туда и обратно — без потерь', () => {
     const values = resolveValues(lava.params, { speed: 1.2, colorA: '#123456' })
-    const common = { ...DEFAULT_COMMON, mouse: false, post: { ...DEFAULT_COMMON.post, grain: 0.3 } }
+    const common = { ...DEFAULT_COMMON, mouse: false, offscreen: false, sleep: 10, fps: 30, post: { ...DEFAULT_COMMON.post, grain: 0.3 } }
     const search = toSearch('lava', lava.params, values, common)
-    expect(search).toBe('?e=lava&speed=1.2&colorA=123456&_mouse=0&_grain=0.3')
+    expect(search).toBe('?e=lava&speed=1.2&colorA=123456&_mouse=0&_offscreen=0&_sleep=10&_fps=30&_grain=0.3')
     const back = fromSearch(search, paramsOf, 'noise')
     expect(back.effectId).toBe('lava')
     expect(back.values).toEqual(values)

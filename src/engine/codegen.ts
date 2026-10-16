@@ -33,7 +33,7 @@ import textParticlesSource from '../runtime/three/text-particles.js?raw'
 import transitionSource from '../runtime/transition.js?raw'
 import type { Values } from '../runtime/runtime'
 import type { EffectDef } from '../effects/types'
-import type { Common } from './params'
+import { runtimeOptions, type Common } from './params'
 
 export type ExportFormat = 'module' | 'react' | 'element'
 
@@ -87,7 +87,7 @@ const SPEC = {
   values: ${json(values)},
 }
 
-const OPTIONS = ${json({ mouse: common.mouse, inertia: common.inertia, quality: common.quality, post: common.post })}
+const OPTIONS = ${json({ ...runtimeOptions(common), post: common.post })}
 
 /**
  * Запустить эффект в элементе.
@@ -184,7 +184,7 @@ ${SCENE_SOURCES[effect.setupName!].trim()}
 
 const VALUES = ${json(values)}
 
-const OPTIONS = ${json({ mouse: common.mouse, inertia: common.inertia, quality: common.quality })}
+const OPTIONS = ${json(runtimeOptions(common))}
 
 /**
  * Запустить 3D-эффект в элементе: холст растянется на него целиком.

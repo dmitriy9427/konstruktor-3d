@@ -27,6 +27,10 @@ export function createScene(THREE, canvas, setup, spec = {}, options = {}) {
     adaptive: true,
     reducedMotion: typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches,
     pauseOffscreen: true,
+    /** Засыпать через столько секунд без действий пользователя (0 — никогда). */
+    sleepAfter: 0,
+    /** Не больше стольких кадров в секунду (0 — сколько даёт экран). */
+    maxFps: 0,
     addons: {},
     ...options,
   }
@@ -56,6 +60,19 @@ export function createScene(THREE, canvas, setup, spec = {}, options = {}) {
   }
   globalThis.addEventListener('pointermove', onMove, { passive: true })
   document.addEventListener('pointerleave', onLeave)
+
+  // ─── Экономия: засыпание без действий пользователя ───────────────────────
+  // Мышь, прокрутка, клавиши, касания — «пользователь здесь». Если ничего не было
+  // sleepAfter секунд, кадры перестают рисоваться; любое действие будит эффект.
+  let lastActivity = performance.now()
+  const onActivity = () => {
+    const wasAsleep = !awake()
+    lastActivity = performance.now()
+    if (wasAsleep) wake()
+  }
+  const awake = () => !opts.sleepAfter || performance.now() - lastActivity < opts.sleepAfter * 1000
+  const ACTIVITY_EVENTS = ['pointermove', 'pointerdown', 'wheel', 'scroll', 'keydown', 'touchstart']
+  for (const name of ACTIVITY_EVENTS) globalThis.addEventListener?.(name, onActivity, { passive: true, capture: true })
   const scrollProgress = () => {
     const r = canvas.getBoundingClientRect()
     const vh = globalThis.innerHeight || 1
@@ -95,16 +112,23 @@ export function createScene(THREE, canvas, setup, spec = {}, options = {}) {
   let fpsFrames = 0
   let fpsStart = 0
 
-  const running = () => !destroyed && visible && !paused && !opts.reducedMotion
+  const running = () => !destroyed && (visible || !opts.pauseOffscreen) && awake() && !paused && !opts.reducedMotion
   function wake() {
     if (!raf && !destroyed) raf = requestAnimationFrame(tick)
   }
   function tick(now) {
     raf = 0
+    // Потолок FPS: рано для нового кадра — ждём следующего обновления экрана.
+    if (opts.maxFps > 0 && last && now - last < 1000 / opts.maxFps - 2) {
+      raf = requestAnimationFrame(tick)
+      return
+    }
     const dt = last ? Math.min((now - last) / 1000, 0.1) : 1 / 60
     last = now
     const cpu = performance.now()
-    if (!opts.reducedMotion && !paused) time += dt
+    // Время идёт, только пока анимация запущена: разовая перерисовка (размер,
+    // новые параметры) у спящего или стоящего эффекта не сдвигает кадр.
+    if (running()) time += dt
     const k = 1 - Math.exp(-dt * (1 / Math.max(opts.inertia, 0.001)) * 0.25)
     const follow = opts.mouse && !opts.reducedMotion
     pointer.x += ((follow ? pointer.tx : 0) - pointer.x) * k
@@ -139,7 +163,7 @@ export function createScene(THREE, canvas, setup, spec = {}, options = {}) {
   }
 
   let io = null
-  if (opts.pauseOffscreen && typeof IntersectionObserver === 'function') {
+  if (typeof IntersectionObserver === 'function') {
     io = new IntersectionObserver(([entry]) => {
       visible = entry.isIntersecting
       if (visible) wake()
@@ -185,6 +209,7 @@ export function createScene(THREE, canvas, setup, spec = {}, options = {}) {
       io?.disconnect()
       globalThis.removeEventListener('pointermove', onMove)
       document.removeEventListener('pointerleave', onLeave)
+      for (const name of ACTIVITY_EVENTS) globalThis.removeEventListener(name, onActivity, { capture: true })
       registry.delete(stats)
       effect.dispose?.()
       // Видеопамять: геометрии, материалы и текстуры сцены.

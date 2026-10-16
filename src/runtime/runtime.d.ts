@@ -44,6 +44,10 @@ export type EffectOptions = {
   reducedMotion?: boolean
   /** Не рисовать, пока эффект за экраном. */
   pauseOffscreen?: boolean
+  /** Засыпать через столько секунд без действий пользователя (0 — никогда). */
+  sleepAfter?: number
+  /** Не больше стольких кадров в секунду (0 — сколько даёт экран). */
+  maxFps?: number
   post?: Partial<PostOptions>
 }
 

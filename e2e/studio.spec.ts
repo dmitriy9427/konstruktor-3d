@@ -94,6 +94,7 @@ test('экспортированный модуль работает на чис
   const errors: string[] = []
   page.on('pageerror', (e) => errors.push(e.message))
   // Пустая страница: только блок и код эффекта (через blob — как отдельный файл).
+  await page.goto('about:blank') // выгрузить Студию: её React не должен рисовать в «чистую» страницу
   await page.setContent('<div id="hero-bg" style="width:400px;height:300px"></div>')
   await page.evaluate(async (source) => {
     const url = URL.createObjectURL(new Blob([source!], { type: 'text/javascript' }))
@@ -112,6 +113,7 @@ test('экспортированный переход прогорает по к
   const code = await page.getByRole('dialog').locator('code').textContent()
   const errors: string[] = []
   page.on('pageerror', (e) => errors.push(e.message))
+  await page.goto('about:blank') // выгрузить Студию: её React не должен рисовать в «чистую» страницу
   await page.setContent('<div style="position:relative;height:400px"><div>под обложкой</div><div id="leaving" style="position:absolute;inset:0;background:#eee">обложка</div></div>')
   await page.evaluate(async (source) => {
     const url = URL.createObjectURL(new Blob([source!], { type: 'text/javascript' }))
@@ -139,6 +141,7 @@ test('экспортированный слайдер листается на ч
   page.on('pageerror', (e) => errors.push(e.message))
   page.on('console', (m) => m.type() === 'warning' && errors.push(m.text()))
   const svg = (color: string) => `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="300" height="200"><rect width="300" height="200" fill="${color}"/><circle cx="150" cy="100" r="60" fill="#fff"/></svg>`)}`
+  await page.goto('about:blank') // выгрузить Студию: её React не должен рисовать в «чистую» страницу
   await page.setContent(`<div id="slider" style="width:300px"><img src="${svg('#c33')}" width="300" height="200"><img src="${svg('#36c')}" width="300" height="200"></div>`)
   const index = await page.evaluate(async (source) => {
     const url = URL.createObjectURL(new Blob([source!], { type: 'text/javascript' }))
@@ -178,6 +181,7 @@ test('экспортированный 3D-эффект работает на ч�
   const map = /<script type="importmap">[\s\S]*?<\/script>/.exec(html)![0]
   const errors: string[] = []
   page.on('pageerror', (e) => errors.push(e.message))
+  await page.goto('about:blank') // выгрузить Студию: её React не должен рисовать в «чистую» страницу
   await page.setContent(`${map}<div id="hero-bg" style="position:relative;width:400px;height:300px"></div>`)
   await page.evaluate(async (source) => {
     const url = URL.createObjectURL(new Blob([source!], { type: 'text/javascript' }))
@@ -188,4 +192,21 @@ test('экспортированный 3D-эффект работает на ч�
   const stats = await canvasStats(page, '#hero-bg canvas')
   expect(stats.spread).toBeGreaterThan(1)
   expect(errors).toEqual([])
+})
+
+test('«Засыпать без действий»: без мыши кадр замирает, движение будит', async ({ page }) => {
+  await page.goto('studio.html?e=noise&speed=2&_sleep=1&_mouse=0')
+  // Панель FPS лежит поверх превью и обновляет цифры — уберём её из кадра.
+  await page.getByRole('switch', { name: 'FPS' }).uncheck()
+  await page.mouse.move(5, 5)
+  const shot = async () => (await page.locator('.preview__canvas').screenshot()).toString('base64')
+  await page.waitForTimeout(1600) // секунда без действий + запас
+  const a = await shot()
+  await page.waitForTimeout(400)
+  expect(await shot(), 'спит — кадр не меняется').toBe(a)
+  // Движение мыши будит — «Шум» снова течёт.
+  await page.mouse.move(400, 300)
+  await page.mouse.move(420, 320)
+  await page.waitForTimeout(300)
+  expect(await shot(), 'проснулся — кадр меняется').not.toBe(a)
 })

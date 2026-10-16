@@ -10,7 +10,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 
 import type { EffectDef } from '../effects/types'
-import type { Common } from '../engine/params'
+import { runtimeOptions, type Common } from '../engine/params'
 import { createEffect, type EffectInstance, type Values } from '../runtime/runtime'
 import type { SceneInstance } from '../runtime/scene'
 import { createTilt, type TiltInstance } from '../runtime/tilt'
@@ -48,7 +48,7 @@ function ShaderPreview({ effect, values, common, image }: Props) {
       instance.current = createEffect(
         canvas,
         { name: effect.name, fragment: effect.fragment!, params: effect.params, values: v, image: effect.kind === 'image' ? (img.current ?? undefined) : undefined },
-        { mouse: c.mouse, inertia: c.inertia, quality: c.quality, post: c.post, reducedMotion: false },
+        { ...runtimeOptions(c), post: c.post, reducedMotion: false },
       )
     } catch (e) {
       // Ошибка приходит из внешней системы (компиляция шейдера) — показать её можно только так.
@@ -63,7 +63,7 @@ function ShaderPreview({ effect, values, common, image }: Props) {
   }, [effect])
 
   useEffect(() => instance.current?.set(values), [values])
-  useEffect(() => instance.current?.setOptions({ mouse: common.mouse, inertia: common.inertia, quality: common.quality, post: common.post }), [common])
+  useEffect(() => instance.current?.setOptions({ ...runtimeOptions(common), post: common.post }), [common])
   useEffect(() => {
     if (effect.kind === 'image' && img.current) instance.current?.setImage(img.current)
   }, [image, effect.kind])
@@ -207,7 +207,7 @@ function SlidesPreview({ effect, values, common, image }: Props) {
       instance.current = createEffect(
         canvas,
         { name: effect.name, fragment: effect.fragment!, params: effect.params, values: v, images },
-        { mouse: c.mouse, inertia: c.inertia, quality: c.quality, post: c.post, reducedMotion: false },
+        { ...runtimeOptions(c), post: c.post, reducedMotion: false },
       )
     } catch (e) {
       // oxlint-disable-next-line react/set-state-in-effect
@@ -224,7 +224,7 @@ function SlidesPreview({ effect, values, common, image }: Props) {
   }, [effect, images])
 
   useEffect(() => instance.current?.set(values), [values])
-  useEffect(() => instance.current?.setOptions({ mouse: common.mouse, inertia: common.inertia, quality: common.quality, post: common.post }), [common])
+  useEffect(() => instance.current?.setOptions({ ...runtimeOptions(common), post: common.post }), [common])
 
   return (
     <div className="preview preview--image">
@@ -277,9 +277,7 @@ function ScenePreview({ effect, values, common }: Props) {
       try {
         const { values: v, common: c } = latest.current
         instance.current = createScene(THREE, canvas, effect.setup!, { name: effect.name, values: v }, {
-          mouse: c.mouse,
-          inertia: c.inertia,
-          quality: c.quality,
+          ...runtimeOptions(c),
           reducedMotion: false,
           addons: room ? { RoomEnvironment: room.RoomEnvironment } : {},
         })
@@ -297,7 +295,7 @@ function ScenePreview({ effect, values, common }: Props) {
   }, [effect])
 
   useEffect(() => instance.current?.set(values), [values])
-  useEffect(() => instance.current?.setOptions({ mouse: common.mouse, inertia: common.inertia, quality: common.quality }), [common])
+  useEffect(() => instance.current?.setOptions(runtimeOptions(common)), [common])
 
   return (
     <div ref={host} className="preview" role="img" aria-label={`Превью: ${effect.name}`}>

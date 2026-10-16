@@ -8,6 +8,8 @@ export type SceneOptions = {
   adaptive?: boolean
   reducedMotion?: boolean
   pauseOffscreen?: boolean
+  sleepAfter?: number
+  maxFps?: number
   /** Дополнения three.js, которые нужны эффекту: { RoomEnvironment } */
   addons?: Record<string, unknown>
 }
