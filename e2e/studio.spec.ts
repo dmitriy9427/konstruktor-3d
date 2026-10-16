@@ -75,9 +75,9 @@ for (const effect of EFFECTS) {
 }
 
 test('пресет и ползунок попадают в адрес, код открывается', async ({ page }) => {
-  await page.goto('studio.html?e=lava')
+  await page.goto('studio.html?e=cells')
   await page.locator('.presets .chip').nth(1).click()
-  await expect(page).toHaveURL(/e=lava&/)
+  await expect(page).toHaveURL(/e=cells&/)
   await page.getByRole('button', { name: 'Забрать код' }).click()
   const drawer = page.getByRole('dialog', { name: 'Забрать код' })
   await expect(drawer.locator('code')).toContainText('export function mount')

@@ -3,6 +3,7 @@
  * Ползунки, превью и экспорт построятся из его описания сами.
  */
 import { aurora } from './aurora'
+import { cells } from './cells'
 import { clouds } from './clouds'
 import { imageDistort } from './image-distort'
 import { lava } from './lava'
@@ -16,7 +17,7 @@ import { burn, curtain, dissolve } from './transitions'
 import type { Category, EffectDef } from './types'
 import { waves } from './waves'
 
-export const EFFECTS: EffectDef[] = [noise, lava, waves, clouds, space, aurora, plasma, imageDistort, burn, dissolve, curtain, slides, galaxy, swarm, morph, textParticles, glass, tilt]
+export const EFFECTS: EffectDef[] = [noise, lava, cells, waves, clouds, space, aurora, plasma, imageDistort, burn, dissolve, curtain, slides, galaxy, swarm, morph, textParticles, glass, tilt]
 
 export const CATEGORIES: Category[] = ['Фоны', 'Изображения', 'Переходы', '3D', 'Без WebGL']
 

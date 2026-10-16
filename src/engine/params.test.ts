@@ -4,7 +4,7 @@ import { EFFECTS, effectById } from '../effects'
 import type { SelectParam } from '../runtime/runtime'
 import { DEFAULT_COMMON, changedValues, fromSearch, hslToHex, randomValues, resolveValues, sanitize, toSearch } from './params'
 
-const lava = effectById('lava')!
+const lava = effectById('cells')!
 const paramsOf = (id: string) => effectById(id)?.params
 
 describe('sanitize', () => {
@@ -31,21 +31,21 @@ describe('адрес Студии', () => {
   it('туда и обратно — без потерь', () => {
     const values = resolveValues(lava.params, { speed: 1.2, colorA: '#123456' })
     const common = { ...DEFAULT_COMMON, mouse: false, offscreen: false, sleep: 10, fps: 30, post: { ...DEFAULT_COMMON.post, grain: 0.3 } }
-    const search = toSearch('lava', lava.params, values, common)
-    expect(search).toBe('?e=lava&speed=1.2&colorA=123456&_mouse=0&_offscreen=0&_sleep=10&_fps=30&_grain=0.3')
+    const search = toSearch('cells', lava.params, values, common)
+    expect(search).toBe('?e=cells&speed=1.2&colorA=123456&_mouse=0&_offscreen=0&_sleep=10&_fps=30&_grain=0.3')
     const back = fromSearch(search, paramsOf, 'noise')
-    expect(back.effectId).toBe('lava')
+    expect(back.effectId).toBe('cells')
     expect(back.values).toEqual(values)
     expect(back.common).toEqual(common)
   })
   it('неизвестный эффект и кривые значения — к умолчаниям', () => {
-    const back = fromSearch('?e=nope&speed=999', paramsOf, 'lava')
-    expect(back.effectId).toBe('lava')
+    const back = fromSearch('?e=nope&speed=999', paramsOf, 'cells')
+    expect(back.effectId).toBe('cells')
     expect(back.values.speed).toBe(lava.params.speed.type === 'number' ? lava.params.speed.max : 0)
   })
   it('в адрес попадают только отличия от умолчаний', () => {
     expect(changedValues(lava.params, resolveValues(lava.params))).toEqual({})
-    expect(toSearch('lava', lava.params, resolveValues(lava.params), DEFAULT_COMMON)).toBe('?e=lava')
+    expect(toSearch('cells', lava.params, resolveValues(lava.params), DEFAULT_COMMON)).toBe('?e=cells')
   })
 })
 

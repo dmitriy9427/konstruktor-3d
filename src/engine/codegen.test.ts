@@ -31,11 +31,11 @@ describe('generate', () => {
   }
 
   it('в файл попадают текущие значения и ссылка', () => {
-    const lava = effectById('lava')!
+    const lava = effectById('cells')!
     const values = resolveValues(lava.params, { colorA: '#abcdef' })
-    const [file] = generate(lava, values, DEFAULT_COMMON, { format: 'module', lazy: false, link: 'https://x.test/?e=lava' })
+    const [file] = generate(lava, values, DEFAULT_COMMON, { format: 'module', lazy: false, link: 'https://x.test/?e=cells' })
     expect(file.code).toContain('"colorA": "#abcdef"')
-    expect(file.code).toContain('https://x.test/?e=lava')
+    expect(file.code).toContain('https://x.test/?e=cells')
   })
 
   it.each<[ExportFormat, string[]]>([
