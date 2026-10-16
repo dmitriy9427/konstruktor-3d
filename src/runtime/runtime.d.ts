@@ -25,6 +25,11 @@ export type EffectSpec = {
   image?: string | HTMLImageElement
   /** Слайды: картинки для перехода между ними (адреса или <img>). */
   images?: (string | HTMLImageElement)[]
+  /**
+   * Симуляция: шейдер шага (читает uState, пишет новое состояние), размер текстуры.
+   * Результат доступен основному шейдеру как uSim.
+   */
+  simulation?: { fragment: string; size?: number }
   /** С какого времени начинать анимацию (секунды) — первый кадр сразу «красивый». */
   startTime?: number
 }
@@ -81,6 +86,7 @@ export const COMMON: string
 export function uniformName(key: string): string
 export function hexToRgb(hex: string): [number, number, number]
 export function uniformValue(param: Param, value: unknown): number | number[]
+export function buildSimulation(spec: Pick<EffectSpec, 'params' | 'simulation'>): string
 export function buildFragment(spec: Pick<EffectSpec, 'fragment' | 'params' | 'image'>): string
 export function defaultsOf(params: Params): Values
 export function createEffect(canvas: HTMLCanvasElement, spec: EffectSpec, options?: EffectOptions): EffectInstance

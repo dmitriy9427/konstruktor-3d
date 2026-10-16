@@ -86,6 +86,13 @@ describe('generate', () => {
     expect(html.code).toContain('"three": "https://cdn.jsdelivr.net/npm/three@')
   })
 
+  it('симуляция («Волны») уходит в экспорт', () => {
+    const waves = effectById('waves')!
+    const [js] = generate(waves, resolveValues(waves.params), DEFAULT_COMMON, { format: 'module', lazy: false })
+    expect(js.code).toContain('simulation: {')
+    expect(js.code).toContain('export function buildSimulation')
+  })
+
   it('веб-компонент регистрирует тег k3d-<id>', () => {
     const [file] = generate(EFFECTS[0], resolveValues(EFFECTS[0].params), DEFAULT_COMMON, { format: 'element', lazy: true })
     expect(file.code).toContain(`customElements.define('k3d-${EFFECTS[0].id}'`)

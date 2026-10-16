@@ -210,3 +210,18 @@ test('«Засыпать без действий»: без мыши кадр з�
   await page.waitForTimeout(300)
   expect(await shot(), 'проснулся — кадр меняется').not.toBe(a)
 })
+
+test('«Волны»: клик по воде — круги (кадр меняется даже без мыши)', async ({ page }) => {
+  await page.goto('studio.html?e=waves&speed=0&rain=0')
+  await page.getByRole('switch', { name: 'FPS' }).uncheck()
+  const canvas = page.locator('.preview__canvas')
+  await page.waitForTimeout(500)
+  const box = (await canvas.boundingBox())!
+  await page.mouse.move(box.x + 5, box.y + 5) // уйти с воды
+  await page.waitForTimeout(800)
+  const before = (await canvas.screenshot()).toString('base64')
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height * 0.85)
+  await page.mouse.move(box.x + 5, box.y + 5)
+  await page.waitForTimeout(300)
+  expect((await canvas.screenshot()).toString('base64'), 'после клика по воде пошли круги').not.toBe(before)
+})

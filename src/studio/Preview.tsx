@@ -47,7 +47,7 @@ function ShaderPreview({ effect, values, common, image }: Props) {
       const { values: v, common: c } = latest.current
       instance.current = createEffect(
         canvas,
-        { name: effect.name, fragment: effect.fragment!, params: effect.params, values: v, image: effect.kind === 'image' ? (img.current ?? undefined) : undefined },
+        { name: effect.name, fragment: effect.fragment!, params: effect.params, values: v, simulation: effect.simulation, image: effect.kind === 'image' ? (img.current ?? undefined) : undefined },
         { ...runtimeOptions(c), post: c.post, reducedMotion: false },
       )
     } catch (e) {

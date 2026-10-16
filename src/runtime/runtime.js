@@ -16,6 +16,8 @@
  *   - общие uniform: время, размер, мышь (с инерцией), наведение, прокрутка;
  *   - картинку-текстуру (для эффектов «искажение изображения»);
  *   - слайды: несколько картинок и анимированный переход между ними;
+ *   - симуляцию: состояние (например, высота воды) живёт в текстуре и
+ *     пересчитывается своим шейдером каждый кадр — круги от капель, мышь толкает воду;
  *   - постобработку: зерно, хроматическая аберрация, виньетка, свечение;
  *   - экономию: кадры только пока эффект на экране, «уменьшить движение»,
  *     потолок плотности пикселей и его автоматическое снижение при просадке FPS;
@@ -36,6 +38,7 @@ uniform vec2 uResolution;
 uniform float uTime;
 uniform vec2 uMouse;
 uniform float uMouseActive;
+uniform vec2 uMouseVel;
 uniform float uHover;
 uniform float uScroll;
 
@@ -139,7 +142,22 @@ vec3 fromAt(vec2 uv) { return texture(uFrom, coverUv(uv, uResolution, uFromRes))
 vec3 toAt(vec2 uv) { return texture(uTo, coverUv(uv, uResolution, uToRes)).rgb; }
 `
     : ''
-  return `#version 300 es\n${COMMON}\n${image}${decls}\n${slides}out vec4 fragColor;\n${spec.fragment}`
+  // Симуляция: результат прошлого шага — текстура uSim (её пишет buildSimulation).
+  const sim = spec.simulation ? 'uniform sampler2D uSim;\nuniform vec2 uSimRes;\n' : ''
+  return `#version 300 es\n${COMMON}\n${image}${decls}\n${slides}${sim}out vec4 fragColor;\n${spec.fragment}`
+}
+
+/**
+ * Шейдер шага симуляции. Читает прошлое состояние (uState), пишет новое.
+ * Доступны те же общие uniform и параметры эффекта, плюс клики мыши этого
+ * шага: uClicks[i] = (x, y в долях холста, сила, 0); сила 0 — клика нет.
+ */
+export function buildSimulation(spec) {
+  const decls = Object.entries(spec.params)
+    .filter(([, param]) => param.type !== 'text')
+    .map(([key, param]) => `uniform ${glslType(param)} ${uniformName(key)};`)
+    .join('\n')
+  return `#version 300 es\n${COMMON}\n${decls}\nuniform sampler2D uState;\nuniform vec2 uSimRes;\nuniform vec4 uClicks[4];\nuniform float uSimStep;\nout vec4 fragColor;\n${spec.simulation.fragment}`
 }
 
 const DEFAULT_POST = { grain: 0, chroma: 0, vignette: 0, bloom: 0 }
@@ -205,6 +223,44 @@ export function createEffect(canvas, spec, options = {}) {
 
   const main = link(buildFragment(spec))
   const post = link(POST_FRAGMENT)
+
+  // ─── Симуляция (если эффект её описал) ────────────────────────────────────
+  // Две текстуры с плавающей точкой по очереди («пинг-понг»): шаг читает одну,
+  // пишет в другую. Нужен рендер в float-текстуру (EXT_color_buffer_float) —
+  // его нет на части старых телефонов; тогда эффект работает без симуляции.
+  const simulation = (() => {
+    if (!spec.simulation || !gl.getExtension('EXT_color_buffer_float')) return null
+    const size = spec.simulation.size ?? 256
+    const make = () => {
+      const texture = gl.createTexture()
+      gl.bindTexture(gl.TEXTURE_2D, texture)
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, size, size, 0, gl.RGBA, gl.HALF_FLOAT, null)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+      const framebuffer = gl.createFramebuffer()
+      gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer)
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0)
+      gl.clearColor(0, 0, 0, 0)
+      gl.clear(gl.COLOR_BUFFER_BIT)
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+      return { texture, framebuffer }
+    }
+    return { size, program: link(buildSimulation(spec)), a: make(), b: make(), step: 0, pending: 0 }
+  })()
+  // Клики мыши по холсту — капли, удары; уходят в один ближайший шаг симуляции.
+  const clicks = []
+  const onDown = (event) => {
+    const rect = canvas.getBoundingClientRect()
+    const x = (event.clientX - rect.left) / rect.width
+    const y = 1 - (event.clientY - rect.top) / rect.height
+    if (x < 0 || x > 1 || y < 0 || y > 1 || !simulation) return
+    clicks.push([x, y, 1])
+    if (clicks.length > 4) clicks.shift()
+    requestDraw()
+  }
+  globalThis.addEventListener?.('pointerdown', onDown, { passive: true })
 
   // Один треугольник больше экрана накрывает его целиком — дешевле двух для прямоугольника.
   const vao = gl.createVertexArray()
@@ -391,6 +447,13 @@ export function createEffect(canvas, spec, options = {}) {
     pointer.y += ((follow ? pointer.ty : 0.5) - pointer.y) * k
     pointer.active += ((follow ? pointer.tactive : 0) - pointer.active) * k
     pointer.hover += (pointer.thover - pointer.hover) * Math.min(1, dt * 6)
+    // Скорость мыши (доли холста в секунду) — чтобы «толкать» воду сильнее при быстром движении.
+    pointer.vx = (pointer.x - (pointer.px ?? pointer.x)) / Math.max(dt, 1e-3)
+    pointer.vy = (pointer.y - (pointer.py ?? pointer.y)) / Math.max(dt, 1e-3)
+    pointer.px = pointer.x
+    pointer.py = pointer.y
+    // Симуляция — 60 шагов в секунду при любой частоте экрана (на 120 Гц круги не бегут вдвое быстрее).
+    if (simulation && running()) simulation.pending = Math.min(3, (simulation.pending ?? 0) + dt * 60)
 
     draw()
 
@@ -415,7 +478,49 @@ export function createEffect(canvas, spec, options = {}) {
     else last = 0
   }
 
+  /** Общие uniform — одинаковые для шага симуляции и основного шейдера. */
+  function setCommon(program) {
+    gl.uniform2f(program.loc('uResolution'), canvas.width, canvas.height)
+    gl.uniform1f(program.loc('uTime'), time)
+    gl.uniform2f(program.loc('uMouse'), pointer.x, pointer.y)
+    gl.uniform1f(program.loc('uMouseActive'), pointer.active)
+    gl.uniform2f(program.loc('uMouseVel'), pointer.vx || 0, pointer.vy || 0)
+    gl.uniform1f(program.loc('uHover'), pointer.hover)
+    gl.uniform1f(program.loc('uScroll'), scrollProgress())
+    for (const [key, param] of Object.entries(spec.params)) {
+      if (param.type === 'text') continue
+      const value = uniformValue(param, values[key])
+      if (Array.isArray(value)) gl.uniform3fv(program.loc(uniformName(key)), value)
+      else gl.uniform1f(program.loc(uniformName(key)), value)
+    }
+  }
+
+  /** Один шаг симуляции: читаем a, пишем в b, меняем местами. */
+  function stepSimulation() {
+    const { program, size } = simulation
+    gl.bindFramebuffer(gl.FRAMEBUFFER, simulation.b.framebuffer)
+    gl.viewport(0, 0, size, size)
+    gl.useProgram(program.program)
+    setCommon(program)
+    gl.activeTexture(gl.TEXTURE4)
+    gl.bindTexture(gl.TEXTURE_2D, simulation.a.texture)
+    gl.uniform1i(program.loc('uState'), 4)
+    gl.uniform2f(program.loc('uSimRes'), size, size)
+    gl.uniform1f(program.loc('uSimStep'), simulation.step++)
+    const data = new Float32Array(16)
+    clicks.splice(0).forEach((c, i) => data.set([c[0], c[1], c[2], 0], i * 4))
+    gl.uniform4fv(program.loc('uClicks'), data)
+    gl.bindVertexArray(vao)
+    gl.drawArrays(gl.TRIANGLES, 0, 3)
+    ;[simulation.a, simulation.b] = [simulation.b, simulation.a]
+  }
+
   function draw() {
+    // Симуляция шагает, только пока анимация идёт (спящий эффект — вода замерла).
+    if (simulation) {
+      if (clicks.length && simulation.pending < 1) simulation.pending = 1
+      for (; simulation.pending >= 1; simulation.pending--) stepSimulation()
+    }
     const usePost = postEnabled()
     if (usePost && !fbo) ensureFbo()
     if (timer && !query) {
@@ -426,17 +531,13 @@ export function createEffect(canvas, spec, options = {}) {
     gl.bindFramebuffer(gl.FRAMEBUFFER, usePost ? fbo : null)
     gl.viewport(0, 0, canvas.width, canvas.height)
     gl.useProgram(main.program)
-    gl.uniform2f(main.loc('uResolution'), canvas.width, canvas.height)
-    gl.uniform1f(main.loc('uTime'), time)
-    gl.uniform2f(main.loc('uMouse'), pointer.x, pointer.y)
-    gl.uniform1f(main.loc('uMouseActive'), pointer.active)
-    gl.uniform1f(main.loc('uHover'), pointer.hover)
-    gl.uniform1f(main.loc('uScroll'), scrollProgress())
-    for (const [key, param] of Object.entries(spec.params)) {
-      if (param.type === 'text') continue
-      const value = uniformValue(param, values[key])
-      if (Array.isArray(value)) gl.uniform3fv(main.loc(uniformName(key)), value)
-      else gl.uniform1f(main.loc(uniformName(key)), value)
+    setCommon(main)
+    if (spec.simulation) {
+      // Нет float-текстур — uSim останется пустой (нулевой) текстурой: вода без кругов.
+      gl.activeTexture(gl.TEXTURE5)
+      gl.bindTexture(gl.TEXTURE_2D, simulation ? simulation.a.texture : null)
+      gl.uniform1i(main.loc('uSim'), 5)
+      gl.uniform2f(main.loc('uSimRes'), simulation?.size ?? 1, simulation?.size ?? 1)
     }
     if (spec.image) {
       gl.activeTexture(gl.TEXTURE0)
@@ -570,6 +671,14 @@ export function createEffect(canvas, spec, options = {}) {
       registry.delete(stats)
       gl.deleteProgram(main.program)
       gl.deleteProgram(post.program)
+      globalThis.removeEventListener?.('pointerdown', onDown)
+      if (simulation) {
+        gl.deleteProgram(simulation.program.program)
+        for (const target of [simulation.a, simulation.b]) {
+          gl.deleteTexture(target.texture)
+          gl.deleteFramebuffer(target.framebuffer)
+        }
+      }
       gl.deleteBuffer(buffer)
       gl.deleteVertexArray(vao)
       for (const slot of textures) if (slot.texture) gl.deleteTexture(slot.texture)

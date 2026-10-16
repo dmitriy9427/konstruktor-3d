@@ -84,7 +84,8 @@ const SPEC = {
   name: ${JSON.stringify(effect.name)},
   fragment: ${JSON.stringify(effect.fragment)},
   params: ${json(runtimeParams(effect))},
-  values: ${json(values)},
+  values: ${json(values)},${effect.simulation ? `
+  simulation: ${json(effect.simulation)},` : ''}
 }
 
 const OPTIONS = ${json({ ...runtimeOptions(common), post: common.post })}

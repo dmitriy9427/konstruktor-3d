@@ -33,6 +33,8 @@ export type EffectDef = {
   description: string
   /** Тело фрагментного шейдера (для quad и image). */
   fragment?: string
+  /** Симуляция: шейдер шага (состояние в текстуре, см. runtime.js), её результат — uSim. */
+  simulation?: { fragment: string; size?: number }
   params: Params
   /** Готовые наборы значений: «Закат», «Неон»… */
   presets?: { name: string; values: Values }[]
