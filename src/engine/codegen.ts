@@ -460,8 +460,52 @@ ${script}
 `
 }
 
+/** Эффект «по прокрутке» (cycle: 'scroll'): липкий стек, прогресс — от его прокрутки. */
+function scrollStageUsage(effect: EffectDef, options: ExportOptions) {
+  const tag = elementTag(effect)
+  const markup = `<!--
+  Липкий стек: блок с эффектом прилипает к экрану, пока стек прокручивается.
+  Прогресс прокрутки стека (0…1) — это время суток: рассвет → день → закат → шторм → ночь.
+  Высота стека задаёт, сколько прокрутки на всю смену: 500vh — по экрану на сцену.
+-->
+<div class="day-cycle">
+  ${options.format === 'element' ? `<${tag} class="day-cycle__bg"></${tag}>` : '<div id="sea" class="day-cycle__bg"></div>'}
+  <section class="day-cycle__scene"><h2>Рассвет</h2></section>
+  <section class="day-cycle__scene"><h2>День</h2></section>
+  <section class="day-cycle__scene"><h2>Закат</h2></section>
+  <section class="day-cycle__scene"><h2>Шторм</h2></section>
+  <section class="day-cycle__scene"><h2>Ночь</h2></section>
+</div>
+
+<style>
+  .day-cycle { position: relative; }
+  /* Фон прилипает к верху экрана и не занимает места: сцены едут поверх него. */
+  .day-cycle__bg { position: sticky; top: 0; display: block; height: 100vh; margin-bottom: -100vh; }
+  .day-cycle__scene { position: relative; height: 100vh; display: grid; place-items: center; color: #fff; }
+</style>
+`
+  if (options.format === 'element') {
+    return `${markup}
+<script type="module" src="./effect.js"></script>
+<script type="module">
+  // Веб-компонент сам не знает про стек — передадим его после запуска.
+  const el = document.querySelector('${tag}')
+  customElements.whenDefined('${tag}').then(() => requestAnimationFrame(() => el.instance?.setOptions({ scrollStack: el.closest('.day-cycle') })))
+</script>
+`
+  }
+  const call = `mount(document.querySelector('#sea'), { scrollStack: document.querySelector('.day-cycle') })`
+  return `${markup}
+<script type="module">
+  import { mount } from './effect.js'
+  ${call}
+</script>
+`
+}
+
 function usageHtml(effect: EffectDef, options: ExportOptions, values: Values) {
   if (effect.kind === 'transition') return transitionUsage(effect, options, values)
+  if (values.cycle === 'scroll') return scrollStageUsage(effect, options)
   if (effect.kind === 'slides') return slidesUsage(effect, options)
   // Заглушка — цвет фона эффекта (если он есть), иначе первый цвет.
   const firstColor = 'background' in effect.params ? 'background' : Object.keys(effect.params).find((key) => effect.params[key].type === 'color')

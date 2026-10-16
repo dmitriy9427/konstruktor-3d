@@ -310,7 +310,8 @@
 
 .preview--image ~ .stage__caption,
 .preview--tilt ~ .stage__caption,
-.preview--transition ~ .stage__caption {
+.preview--transition ~ .stage__caption,
+.preview--scroll ~ .stage__caption {
   display: none;
 }
 
@@ -431,6 +432,43 @@
   z-index: 3;
   display: flex;
   gap: 8px;
+}
+
+/* Эффект «по прокрутке»: стек, внутри — прилипший холст и подписи сцен поверх. */
+.scroll-stage {
+  position: relative;
+}
+
+.scroll-stage__sticky {
+  position: sticky;
+  top: 0;
+  height: 100cqh;
+  margin-bottom: -100cqh;
+}
+
+.scroll-stage__sticky canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.scroll-stage__scene {
+  position: relative;
+  display: grid;
+  align-content: center;
+  gap: 10px;
+  height: 100cqh;
+  padding: clamp(20px, 6cqw, 64px);
+  color: #fff;
+  text-shadow: 0 2px 24px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+}
+
+.scroll-stage__scene h2 {
+  font-size: clamp(36px, 8cqw, 80px);
+  line-height: 1;
+  letter-spacing: -0.03em;
 }
 
 /* ── Параметры ──────────────────────────────────────────────── */

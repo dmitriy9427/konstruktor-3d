@@ -225,3 +225,18 @@ test('«Волны»: клик по воде — круги (кадр меняе
   await page.waitForTimeout(300)
   expect((await canvas.screenshot()).toString('base64'), 'после клика по воде пошли круги').not.toBe(before)
 })
+
+test('«Сутки по прокрутке»: море прилипло, при прокрутке меняется только время суток', async ({ page }) => {
+  await page.goto('studio.html?e=waves&cycle=scroll')
+  const demo = page.locator('.demo')
+  const sticky = page.locator('.scroll-stage__sticky')
+  const h = await demo.evaluate((d) => d.clientHeight)
+  await demo.evaluate((d, y) => d.scrollTo(0, y), h * 2.5)
+  await page.waitForTimeout(200)
+  const offset = await sticky.evaluate((e) => e.getBoundingClientRect().top - e.closest('.demo')!.getBoundingClientRect().top)
+  expect(Math.round(offset), 'холст остался вверху видимой области').toBe(0)
+  // В экспорте — тот же липкий стек и scrollStack.
+  await page.getByRole('button', { name: 'Забрать код' }).click()
+  await page.getByRole('dialog').getByRole('tab', { name: 'index.html' }).click()
+  await expect(page.getByRole('dialog').locator('code')).toContainText("scrollStack: document.querySelector('.day-cycle')")
+})

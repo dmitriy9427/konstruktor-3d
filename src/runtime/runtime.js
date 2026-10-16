@@ -387,11 +387,22 @@ export function createEffect(canvas, spec, options = {}) {
   const ACTIVITY_EVENTS = ['pointermove', 'pointerdown', 'wheel', 'scroll', 'keydown', 'touchstart']
   for (const name of ACTIVITY_EVENTS) globalThis.addEventListener?.(name, onActivity, { passive: true, capture: true })
 
+  // uScroll: 0…1. Обычно — как блок проезжает через экран (появился снизу → ушёл вверх).
+  // С opts.scrollStack — как прокручен «липкий» стек: блок стоит на месте, пока
+  // стек проезжает, и прогресс идёт от верха стека у верха экрана до его конца.
   const scrollProgress = () => {
+    const vp = opts.scroller ? opts.scroller.getBoundingClientRect() : { top: 0, height: globalThis.innerHeight || 1 }
+    if (opts.scrollStack) {
+      const r = opts.scrollStack.getBoundingClientRect()
+      const run = r.height - vp.height
+      return run > 0 ? Math.min(1, Math.max(0, (vp.top - r.top) / run)) : 0
+    }
     const rect = canvas.getBoundingClientRect()
-    const vh = globalThis.innerHeight || 1
-    return Math.min(1, Math.max(0, (vh - rect.top) / (vh + rect.height)))
+    return Math.min(1, Math.max(0, (vp.top + vp.height - rect.top) / (vp.height + rect.height)))
   }
+  // Прокрутка будит кадр (эффект мог стоять: «уменьшить движение», пауза).
+  const onScrollDraw = () => opts.scrollStack && requestDraw()
+  ;(opts.scroller ?? globalThis).addEventListener?.('scroll', onScrollDraw, { passive: true })
 
   // ─── Цикл кадров ──────────────────────────────────────────────────────────
   let visible = true
@@ -668,6 +679,7 @@ export function createEffect(canvas, spec, options = {}) {
       globalThis.removeEventListener?.('pointermove', onMove)
       document.removeEventListener('pointerleave', onLeave)
       for (const name of ACTIVITY_EVENTS) globalThis.removeEventListener?.(name, onActivity, { capture: true })
+      ;(opts.scroller ?? globalThis).removeEventListener?.('scroll', onScrollDraw)
       registry.delete(stats)
       gl.deleteProgram(main.program)
       gl.deleteProgram(post.program)

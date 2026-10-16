@@ -23,11 +23,17 @@ export function Preview(props: Props) {
   if (props.effect.kind === 'transition') return <TransitionPreview {...props} />
   if (props.effect.kind === 'slides') return <SlidesPreview key={props.effect.id} {...props} />
   if (props.effect.kind === 'three') return <ScenePreview key={props.effect.id} {...props} />
-  return <ShaderPreview key={props.effect.id} {...props} />
+  // Режим «по прокрутке» — мини-страница, которую можно листать (своя разметка → свой key).
+  const scroll = props.values.cycle === 'scroll'
+  return <ShaderPreview key={props.effect.id + (scroll ? '-scroll' : '')} {...props} scroll={scroll} />
 }
 
-function ShaderPreview({ effect, values, common, image }: Props) {
+const SCROLL_SCENES = ['Рассвет', 'День', 'Закат', 'Шторм', 'Ночь']
+
+function ShaderPreview({ effect, values, common, image, scroll = false }: Props & { scroll?: boolean }) {
   const host = useRef<HTMLElement>(null)
+  const scroller = useRef<HTMLDivElement>(null)
+  const stack = useRef<HTMLDivElement>(null)
   const img = useRef<HTMLImageElement>(null)
   const instance = useRef<EffectInstance | null>(null)
   const [error, setError] = useState('')
@@ -48,7 +54,7 @@ function ShaderPreview({ effect, values, common, image }: Props) {
       instance.current = createEffect(
         canvas,
         { name: effect.name, fragment: effect.fragment!, params: effect.params, values: v, simulation: effect.simulation, image: effect.kind === 'image' ? (img.current ?? undefined) : undefined },
-        { ...runtimeOptions(c), post: c.post, reducedMotion: false },
+        { ...runtimeOptions(c), post: c.post, reducedMotion: false, scrollStack: stack.current, scroller: scroller.current },
       )
     } catch (e) {
       // Ошибка приходит из внешней системы (компиляция шейдера) — показать её можно только так.
@@ -75,6 +81,26 @@ function ShaderPreview({ effect, values, common, image }: Props) {
           <img ref={img} src={image} alt="Пример картинки" />
         </figure>
         <p className="preview__hint">Наведите курсор на картинку</p>
+        {error && <p className="preview__error">{error}</p>}
+      </div>
+    )
+  }
+  if (scroll) {
+    // Липкий стек: эффект прилип к экрану, поверх едут подписи сцен.
+    return (
+      <div className="preview preview--scroll">
+        <div ref={scroller} className="demo">
+          <div ref={stack} className="scroll-stage">
+            <div ref={host as React.RefObject<HTMLDivElement>} className="scroll-stage__sticky" role="img" aria-label={`Превью: ${effect.name}`} />
+            {SCROLL_SCENES.map((name, i) => (
+              <section key={name} className="scroll-stage__scene">
+                <p className="demo__eyebrow">Сцена {i + 1} / 5</p>
+                <h2>{name}</h2>
+                {i === 0 && <p>Прокручивайте превью — море стоит на месте, меняется время суток</p>}
+              </section>
+            ))}
+          </div>
+        </div>
         {error && <p className="preview__error">{error}</p>}
       </div>
     )

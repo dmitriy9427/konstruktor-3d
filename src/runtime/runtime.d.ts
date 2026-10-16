@@ -49,6 +49,10 @@ export type EffectOptions = {
   reducedMotion?: boolean
   /** Не рисовать, пока эффект за экраном. */
   pauseOffscreen?: boolean
+  /** «Липкий» стек: uScroll — насколько он прокручен (блок с эффектом прилип внутри). */
+  scrollStack?: HTMLElement | null
+  /** Контейнер прокрутки (по умолчанию — окно). */
+  scroller?: HTMLElement | null
   /** Засыпать через столько секунд без действий пользователя (0 — никогда). */
   sleepAfter?: number
   /** Не больше стольких кадров в секунду (0 — сколько даёт экран). */
