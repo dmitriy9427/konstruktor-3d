@@ -22,7 +22,7 @@ export type EffectKind =
   /** Переход между секциями: SVG-фильтр поверх настоящей секции. */
   | 'transition'
 
-export type Category = 'Фоны' | 'Изображения' | 'Переходы' | '3D' | 'Без WebGL'
+export type Category = 'Свой эффект' | 'Фоны' | 'Изображения' | 'Переходы' | '3D' | 'Без WebGL'
 
 export type EffectDef = {
   id: string

@@ -817,6 +817,80 @@
   color: var(--text);
 }
 
+/* ── «Свой эффект»: редактор кода в панели (панель шире) ── */
+.studio--custom {
+  grid-template-columns: 250px minmax(0, 1fr) 460px;
+}
+
+.editor {
+  display: grid;
+  gap: 8px;
+}
+
+.editor__start {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.editor__start select {
+  flex: 1;
+  min-height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+
+.editor__body {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  height: 380px;
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: #07070b;
+  font: 12.5px/1.6 var(--mono);
+}
+
+.editor__gutter {
+  overflow: hidden;
+  margin: 0;
+  padding: 10px 8px 10px 10px;
+  color: rgba(255, 255, 255, 0.25);
+  text-align: right;
+  user-select: none;
+  font: inherit;
+}
+
+.editor__code {
+  padding: 10px;
+  border: 0;
+  outline: none;
+  resize: none;
+  background: none;
+  color: #d6d6e7;
+  font: inherit;
+  white-space: pre;
+  tab-size: 2;
+}
+
+.editor__errors {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(127, 29, 29, 0.55);
+  font: 12px/1.5 var(--mono);
+  white-space: pre-wrap;
+}
+
+.editor__errors p + p {
+  margin-top: 4px;
+}
+
 /* ── Ящик с кодом ───────────────────────────────────────────── */
 .drawer {
   position: fixed;

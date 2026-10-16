@@ -286,3 +286,21 @@ test('траектория: своя рисуется кликами по пре
   await page.getByRole('button', { name: 'Забрать код' }).click()
   await expect(page.getByRole('dialog').locator('code')).toContainText('"path": {')
 })
+
+test('«Свой эффект»: правка кода пересобирает превью, ошибка — с номером строки, экспорт работает', async ({ page }) => {
+  await page.goto('studio.html?e=custom')
+  await page.evaluate(() => localStorage.clear())
+  const area = page.getByRole('textbox', { name: 'Код шейдера' })
+  // Свой код с параметром.
+  await area.fill('// @param tint color #ff0000 Оттенок\nvoid main() {\n  fragColor = vec4(uTint, 1.0);\n}\n')
+  await expect(page.getByText('Оттенок', { exact: true })).toBeVisible()
+  await expect(page).toHaveURL(/code=/)
+  // Ошибка — понятная, в строке поля.
+  await area.fill('void main() {\n  fragColor = vec4(oops, 1.0);\n}\n')
+  await expect(page.locator('.editor__errors')).toContainText('Строка 2')
+  // Исправили — ошибки нет.
+  await area.fill('// @param tint color #00ff00 Оттенок\nvoid main() {\n  fragColor = vec4(uTint, 1.0);\n}\n')
+  await expect(page.locator('.editor__errors')).toHaveCount(0)
+  await page.getByRole('button', { name: 'Забрать код' }).click()
+  await expect(page.getByRole('dialog').locator('code')).toContainText('fragColor = vec4(uTint, 1.0);')
+})

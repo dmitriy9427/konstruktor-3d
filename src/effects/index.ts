@@ -14,12 +14,16 @@ import { space } from './space'
 import { galaxy, glass, morph, swarm, textParticles } from './three'
 import { tilt } from './tilt'
 import { burn, curtain, dissolve } from './transitions'
+import { makeCustomEffect, TEMPLATES } from '../engine/custom'
 import type { Category, EffectDef } from './types'
 import { waves } from './waves'
 
-export const EFFECTS: EffectDef[] = [noise, lava, cells, waves, clouds, space, aurora, plasma, imageDistort, burn, dissolve, curtain, slides, galaxy, swarm, morph, textParticles, glass, tilt]
+/** «Свой эффект» в каталоге — с кодом шаблона; настоящий код Студия подставляет сама. */
+export const CUSTOM = makeCustomEffect(TEMPLATES[1].code)
 
-export const CATEGORIES: Category[] = ['Фоны', 'Изображения', 'Переходы', '3D', 'Без WebGL']
+export const EFFECTS: EffectDef[] = [CUSTOM, noise, lava, cells, waves, clouds, space, aurora, plasma, imageDistort, burn, dissolve, curtain, slides, galaxy, swarm, morph, textParticles, glass, tilt]
+
+export const CATEGORIES: Category[] = ['Свой эффект', 'Фоны', 'Изображения', 'Переходы', '3D', 'Без WebGL']
 
 export const effectById = (id: string) => EFFECTS.find((e) => e.id === id)
 

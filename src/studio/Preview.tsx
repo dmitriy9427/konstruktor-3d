@@ -26,6 +26,8 @@ type Props = {
   onPick?: (x: number, y: number) => void
   /** Пока рисуют траекторию — показать её поверх превью. */
   path?: [number, number][]
+  /** Ошибка компиляции (для «Своего эффекта» её показывает редактор кода). */
+  onError?: (message: string) => void
 }
 
 /** Прозрачный слой поверх превью: ловит клики, пока рисуют точки (и показывает путь). */
@@ -64,7 +66,7 @@ export function Preview(props: Props) {
 
 const SCROLL_SCENES = ['Рассвет', 'День', 'Закат', 'Шторм', 'Ночь']
 
-function ShaderPreview({ effect, values, common, image, scroll = false, drawing, onPick, path }: Props & { scroll?: boolean }) {
+function ShaderPreview({ effect, values, common, image, scroll = false, drawing, onPick, path, onError }: Props & { scroll?: boolean }) {
   const host = useRef<HTMLElement>(null)
   const scroller = useRef<HTMLDivElement>(null)
   const stack = useRef<HTMLDivElement>(null)
@@ -90,6 +92,9 @@ function ShaderPreview({ effect, values, common, image, scroll = false, drawing,
         { name: effect.name, fragment: effect.fragment!, params: effect.params, values: v, simulation: effect.simulation, image: effect.kind === 'image' ? (img.current ?? undefined) : undefined },
         { ...runtimeOptions(c), post: c.post, reducedMotion: false, scrollStack: stack.current, scroller: scroller.current },
       )
+      // «Свой эффект» пересобирается без смены компонента — прошлую ошибку сбрасываем.
+      // oxlint-disable-next-line react/set-state-in-effect
+      setError('')
     } catch (e) {
       // Ошибка приходит из внешней системы (компиляция шейдера) — показать её можно только так.
       // oxlint-disable-next-line react/set-state-in-effect
@@ -101,6 +106,13 @@ function ShaderPreview({ effect, values, common, image, scroll = false, drawing,
       canvas.remove()
     }
   }, [effect])
+
+  // Ошибку отдаём наверх; удачная сборка — пустая строка.
+  const report = useRef(onError)
+  useLayoutEffect(() => {
+    report.current = onError
+  })
+  useEffect(() => report.current?.(error), [error])
 
   useEffect(() => instance.current?.set(values), [values])
   useEffect(() => instance.current?.setOptions({ ...runtimeOptions(common), post: common.post }), [common])
@@ -142,7 +154,7 @@ function ShaderPreview({ effect, values, common, image, scroll = false, drawing,
   return (
     <div ref={host as React.RefObject<HTMLDivElement>} className="preview" role="img" aria-label={`Превью: ${effect.name}`}>
       {drawing && <DrawLayer onPick={onPick} path={path} />}
-      {error && <p className="preview__error">{error}</p>}
+      {error && !onError && <p className="preview__error">{error}</p>}
     </div>
   )
 }

@@ -6,24 +6,63 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { CATEGORIES, EFFECTS, effectById } from '../effects'
+import { decodeCode, encodeCode, makeCustomEffect, parseParams, TEMPLATES } from '../engine/custom'
+import { buildFragment } from '../runtime/runtime'
 import { DEFAULT_COMMON, fromSearch, pathPoints, randomValues, resolveValues, toSearch, type Common } from '../engine/params'
 import { mountPerf } from '../engine/perf'
 import type { Values } from '../runtime/runtime'
 import { CodeDrawer } from './CodeDrawer'
+import { CodeEditor } from './CodeEditor'
 import { CommonControls, ParamControl, Toggle } from './Controls'
 import { Preview } from './Preview'
 
 const DEMO_IMAGE = `${import.meta.env.BASE_URL}demo/photo.svg`
-const paramsOf = (id: string) => effectById(id)?.params
+const DRAFT_KEY = 'k3d:custom-code'
+
+/** Код «Своего эффекта»: из ссылки, иначе черновик из браузера, иначе шаблон. */
+function initialCode() {
+  const fromUrl = new URLSearchParams(location.search).get('code')
+  const decoded = fromUrl ? decodeCode(fromUrl) : null
+  if (decoded) return decoded
+  try {
+    return localStorage.getItem(DRAFT_KEY) || TEMPLATES[1].code
+  } catch {
+    return TEMPLATES[1].code
+  }
+}
 
 function initialState() {
-  return fromSearch(location.search, paramsOf, EFFECTS[0].id)
+  const code = initialCode()
+  const paramsOf = (id: string) => (id === 'custom' ? parseParams(code).params : effectById(id)?.params)
+  // По умолчанию открываем первый эффект каталога после «Своего».
+  return { ...fromSearch(location.search, paramsOf, EFFECTS[1].id), code }
+}
+
+/** Ошибку видеокарты «ERROR: 0:57: …» переводим в строку поля редактора. */
+function mapErrorLines(message: string, params: ReturnType<typeof parseParams>['params']) {
+  const prefix = buildFragment({ fragment: '', params }).split('\n').length - 1
+  return message.replace(/ERROR: \d+:(\d+):/g, (_, line) => `Строка ${Math.max(1, Number(line) - prefix)}:`).replace(/^Ошибка шейдера: /, '')
 }
 
 export function App() {
   const [initial] = useState(initialState)
+  const [code, setCode] = useState(initial.code)
+  // Превью пересобирается не на каждую букву, а через 400 мс после паузы в наборе.
+  const [compiled, setCompiled] = useState(initial.code)
+  useEffect(() => {
+    const timer = setTimeout(() => setCompiled(code), 400)
+    try {
+      localStorage.setItem(DRAFT_KEY, code)
+    } catch {
+      // без черновика — не страшно
+    }
+    return () => clearTimeout(timer)
+  }, [code])
+  const custom = useMemo(() => makeCustomEffect(compiled), [compiled])
+  const paramErrors = useMemo(() => parseParams(compiled).errors, [compiled])
+  const [compileError, setCompileError] = useState('')
   const [effectId, setEffectId] = useState(initial.effectId)
-  const [values, setValues] = useState<Values>(initial.values)
+  const [storedValues, setValues] = useState<Values>(initial.values)
   const [common, setCommon] = useState<Common>(initial.common)
   const [image, setImage] = useState(DEMO_IMAGE)
   // Рисование точек в превью (параметр типа «points»): какой параметр рисуем и начать ли новую линию.
@@ -31,9 +70,17 @@ export function App() {
   const [newStroke, setNewStroke] = useState(false)
   const [codeOpen, setCodeOpen] = useState(false)
   const [perf, setPerf] = useState(import.meta.env.DEV)
-  const effect = effectById(effectId)!
+  const effect = effectId === 'custom' ? custom : effectById(effectId)!
+  const isCustom = effectId === 'custom'
 
-  const search = useMemo(() => toSearch(effectId, effect.params, values, common), [effectId, effect, values, common])
+  // Для «Своего эффекта» параметры меняются вместе с кодом: значения тех, что
+  // остались, берём из сохранённых, новые — по умолчанию.
+  const values = useMemo(() => (isCustom ? resolveValues(custom.params, storedValues) : storedValues), [isCustom, custom, storedValues])
+
+  const search = useMemo(
+    () => toSearch(effectId, effect.params, values, common) + (isCustom ? `&code=${encodeCode(compiled)}` : ''),
+    [effectId, effect, values, common, isCustom, compiled],
+  )
   const link = `${location.origin}${location.pathname}${search}`
 
   // Адрес обновляем без новой записи в истории: «Назад» уводит со Студии, а не по ползункам.
@@ -53,7 +100,7 @@ export function App() {
 
   const choose = (id: string) => {
     setDrawing(null)
-    const next = effectById(id)!
+    const next = id === 'custom' ? custom : effectById(id)!
     setEffectId(id)
     setValues(resolveValues(next.params))
   }
@@ -71,7 +118,7 @@ export function App() {
   const hasCommon = shader || is3d || Boolean(effect.usesMouse)
 
   return (
-    <div className="studio">
+    <div className={`studio${isCustom ? ' studio--custom' : ''}`}>
       <header className="topbar">
         <a className="brand" href={import.meta.env.BASE_URL}>
           <span className="brand__mark" aria-hidden="true" />
@@ -115,6 +162,7 @@ export function App() {
           image={image}
           drawing={drawing !== null}
           path={drawing === '_path' ? pathPoints(common) : undefined}
+          onError={isCustom ? setCompileError : undefined}
           onPick={(x, y) => {
             if (!drawing) return
             if (drawing === '_path') {
@@ -161,6 +209,20 @@ export function App() {
           </button>
         </div>
 
+        {isCustom && (
+          <>
+            <h3 className="panel__subtitle">Код шейдера</h3>
+            <CodeEditor
+              code={code}
+              onChange={setCode}
+              onLoad={(next) => {
+                setCode(next)
+                setCompiled(next)
+                setValues(resolveValues(parseParams(next).params))
+              }}
+              error={compileError ? mapErrorLines(compileError, custom.params) : ''} paramErrors={paramErrors} />
+          </>
+        )}
         <h3 className="panel__subtitle">Эффект</h3>
         {Object.entries(effect.params).map(([key, param]) => (
           <ParamControl
