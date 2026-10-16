@@ -66,6 +66,8 @@ export type EffectOptions = {
   sleepAfter?: number
   /** Не больше стольких кадров в секунду (0 — сколько даёт экран). */
   maxFps?: number
+  /** Траектория «точки влияния»: точки — доли холста (y вверх), speed — кругов за 10 с. */
+  path?: { points: [number, number][]; closed?: boolean; speed?: number; mode?: 'idle' | 'always' } | null
   post?: Partial<PostOptions>
 }
 

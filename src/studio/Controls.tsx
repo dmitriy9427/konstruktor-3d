@@ -208,8 +208,96 @@ const FPS_OPTIONS = [
   { value: 30, label: '30' },
 ]
 
-/** Общие настройки: мышь, качество, экономия, постобработка. */
-export function CommonControls({ common, onChange, usesMouse, shader, quality }: { common: Common; onChange: (c: Common) => void; usesMouse: boolean; shader: boolean; quality: boolean }) {
+const PATHS: { value: Common['path']; label: string }[] = [
+  { value: 'none', label: 'Нет' },
+  { value: 'circle', label: 'Круг' },
+  { value: 'eight', label: 'Восьмёрка' },
+  { value: 'wave', label: 'Волна' },
+  { value: 'custom', label: 'Своя' },
+]
+
+/** Траектория «точки влияния»: то, на что эффект реагирует мышью, летит по пути. */
+function PathControls({ common, set, drawing, onDraw }: { common: Common; set: (patch: Partial<Common>) => void; drawing: boolean; onDraw: (on: boolean) => void }) {
+  const id = useId()
+  const count = common.pathPoints.split(';').filter(Boolean).length
+  return (
+    <>
+      <h3 className="panel__subtitle">Траектория</h3>
+      <WithHint hint="Точка, на которую эффект реагирует мышью (капля, водоворот, притяжение…), сама летит по пути. Своя — кликайте по превью">
+        <fieldset className="control control--segmented">
+          <legend className="control__label">
+            <span>
+              Путь
+              <HintIcon />
+            </span>
+          </legend>
+          <div className="segmented">
+            {PATHS.map((o) => (
+              <label key={o.value} className="segmented__item">
+                <input type="radio" name={`${id}-path`} checked={common.path === o.value} onChange={() => set({ path: o.value })} />
+                <span>{o.label}</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      </WithHint>
+      {common.path === 'custom' && (
+        <div className="control">
+          <span className="control__label">
+            Точки пути
+            <output className="control__value">{count} / 64</output>
+          </span>
+          <div className="points">
+            <button type="button" className={`button button--small${drawing ? ' button--primary' : ''}`} aria-pressed={drawing} onClick={() => onDraw(!drawing)}>
+              {drawing ? 'Готово' : 'Рисовать'}
+            </button>
+            <button type="button" className="button button--small" disabled={!count} onClick={() => set({ pathPoints: common.pathPoints.split(';').slice(0, -1).join(';') })}>
+              Отменить
+            </button>
+            <button type="button" className="button button--small" disabled={!count} onClick={() => set({ pathPoints: '' })}>
+              Очистить
+            </button>
+          </div>
+          {drawing && <p className="points__help">Кликайте по превью — путь пройдёт через точки по порядку</p>}
+        </div>
+      )}
+      {common.path === 'custom' && (
+        <WithHint hint="Замкнутый путь идёт по кругу, открытый — туда и обратно">
+          <Toggle id={`${id}-closed`} label="Замкнуть путь" checked={common.pathClosed} onChange={(pathClosed) => set({ pathClosed })} />
+        </WithHint>
+      )}
+      {common.path !== 'none' && (
+        <>
+          <WithHint hint="Кругов за 10 секунд">
+            <Range id={`${id}-pspeed`} label="Скорость по пути" min={0.1} max={5} step={0.05} value={common.pathSpeed} onChange={(pathSpeed) => set({ pathSpeed })} />
+          </WithHint>
+          <WithHint hint="Только без мыши — когда курсор над эффектом, он главный, а ушёл — точка снова летит по пути. Всегда — мышь не мешает">
+            <Toggle id={`${id}-always`} label="Всегда по пути" checked={common.pathMode === 'always'} onChange={(on) => set({ pathMode: on ? 'always' : 'idle' })} />
+          </WithHint>
+        </>
+      )}
+    </>
+  )
+}
+
+/** Общие настройки: мышь, траектория, качество, экономия, постобработка. */
+export function CommonControls({
+  common,
+  onChange,
+  usesMouse,
+  shader,
+  quality,
+  drawingPath = false,
+  onDrawPath,
+}: {
+  common: Common
+  onChange: (c: Common) => void
+  usesMouse: boolean
+  shader: boolean
+  quality: boolean
+  drawingPath?: boolean
+  onDrawPath?: (on: boolean) => void
+}) {
   const id = useId()
   const set = (patch: Partial<Common>) => onChange({ ...common, ...patch })
   return (
@@ -224,6 +312,7 @@ export function CommonControls({ common, onChange, usesMouse, shader, quality }:
               <Range id={`${id}-inertia`} label="Инерция мыши" min={0} max={0.6} step={0.01} value={common.inertia} onChange={(inertia) => set({ inertia })} />
             </WithHint>
           )}
+          {quality && <PathControls common={common} set={set} drawing={drawingPath} onDraw={(on) => onDrawPath?.(on)} />}
         </>
       )}
       {quality && (

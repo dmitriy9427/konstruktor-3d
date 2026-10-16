@@ -10,6 +10,8 @@ export type SceneOptions = {
   pauseOffscreen?: boolean
   sleepAfter?: number
   maxFps?: number
+  /** Траектория «точки влияния»: точки — доли холста (y вверх), speed — кругов за 10 с. */
+  path?: { points: [number, number][]; closed?: boolean; speed?: number; mode?: 'idle' | 'always' } | null
   /** Дополнения three.js, которые нужны эффекту: { RoomEnvironment } */
   addons?: Record<string, unknown>
 }

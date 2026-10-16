@@ -24,20 +24,31 @@ type Props = {
   /** Режим рисования точек: клик по превью → onPick(x, y) в долях (y вверх). */
   drawing?: boolean
   onPick?: (x: number, y: number) => void
+  /** Пока рисуют траекторию — показать её поверх превью. */
+  path?: [number, number][]
 }
 
-/** Прозрачный слой поверх превью: ловит клики, пока рисуют точки. */
-function DrawLayer({ onPick }: { onPick?: (x: number, y: number) => void }) {
+/** Прозрачный слой поверх превью: ловит клики, пока рисуют точки (и показывает путь). */
+function DrawLayer({ onPick, path }: { onPick?: (x: number, y: number) => void; path?: [number, number][] }) {
   return (
     <div
       className="draw-layer"
       role="button"
-      aria-label="Поставить звезду"
+      aria-label={path ? 'Поставить точку пути' : 'Поставить звезду'}
       onPointerDown={(e) => {
         const r = e.currentTarget.getBoundingClientRect()
         onPick?.((e.clientX - r.left) / r.width, 1 - (e.clientY - r.top) / r.height)
       }}
-    />
+    >
+      {path && path.length > 0 && (
+        <svg className="draw-layer__path" viewBox="0 0 1 1" preserveAspectRatio="none" aria-hidden="true">
+          <polyline points={path.map(([x, y]) => `${x},${1 - y}`).join(' ')} vectorEffect="non-scaling-stroke" />
+          {path.map(([x, y], i) => (
+            <circle key={i} cx={x} cy={1 - y} r={0.006} />
+          ))}
+        </svg>
+      )}
+    </div>
   )
 }
 
@@ -53,7 +64,7 @@ export function Preview(props: Props) {
 
 const SCROLL_SCENES = ['Рассвет', 'День', 'Закат', 'Шторм', 'Ночь']
 
-function ShaderPreview({ effect, values, common, image, scroll = false, drawing, onPick }: Props & { scroll?: boolean }) {
+function ShaderPreview({ effect, values, common, image, scroll = false, drawing, onPick, path }: Props & { scroll?: boolean }) {
   const host = useRef<HTMLElement>(null)
   const scroller = useRef<HTMLDivElement>(null)
   const stack = useRef<HTMLDivElement>(null)
@@ -130,7 +141,7 @@ function ShaderPreview({ effect, values, common, image, scroll = false, drawing,
   }
   return (
     <div ref={host as React.RefObject<HTMLDivElement>} className="preview" role="img" aria-label={`Превью: ${effect.name}`}>
-      {drawing && <DrawLayer onPick={onPick} />}
+      {drawing && <DrawLayer onPick={onPick} path={path} />}
       {error && <p className="preview__error">{error}</p>}
     </div>
   )
@@ -301,7 +312,7 @@ function SlidesPreview({ effect, values, common, image }: Props) {
  * Превью 3D: three.js (≈ 170 КБ gzip) скачивается, только когда выбран
  * 3D-эффект, — остальная Студия его не грузит. Пока грузится — подпись.
  */
-function ScenePreview({ effect, values, common }: Props) {
+function ScenePreview({ effect, values, common, drawing, onPick, path }: Props) {
   const host = useRef<HTMLDivElement>(null)
   const instance = useRef<SceneInstance | null>(null)
   const [error, setError] = useState('')
@@ -350,6 +361,7 @@ function ScenePreview({ effect, values, common }: Props) {
   return (
     <div ref={host} className="preview" role="img" aria-label={`Превью: ${effect.name}`}>
       {loading && <p className="preview__loading">Загружаю three.js…</p>}
+      {drawing && <DrawLayer onPick={onPick} path={path} />}
       {error && <p className="preview__error">{error}</p>}
     </div>
   )

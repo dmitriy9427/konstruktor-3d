@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { CATEGORIES, EFFECTS, effectById } from '../effects'
-import { DEFAULT_COMMON, fromSearch, randomValues, resolveValues, toSearch, type Common } from '../engine/params'
+import { DEFAULT_COMMON, fromSearch, pathPoints, randomValues, resolveValues, toSearch, type Common } from '../engine/params'
 import { mountPerf } from '../engine/perf'
 import type { Values } from '../runtime/runtime'
 import { CodeDrawer } from './CodeDrawer'
@@ -114,8 +114,13 @@ export function App() {
           common={common}
           image={image}
           drawing={drawing !== null}
+          path={drawing === '_path' ? pathPoints(common) : undefined}
           onPick={(x, y) => {
             if (!drawing) return
+            if (drawing === '_path') {
+              setCommon((c) => ({ ...c, path: 'custom', pathPoints: [c.pathPoints, `${x.toFixed(3)},${y.toFixed(3)}`].filter(Boolean).join(';') }))
+              return
+            }
             setValues((prev) => {
               const current = String(prev[drawing] ?? '')
               const point = `${x.toFixed(3)},${y.toFixed(3)},${newStroke || !current ? 0 : 1}`
@@ -196,7 +201,15 @@ export function App() {
         )}
 
         {hasCommon && <h3 className="panel__subtitle">Общие</h3>}
-        <CommonControls common={common} onChange={setCommon} usesMouse={effect.usesMouse ?? false} shader={shader} quality={shader || is3d} />
+        <CommonControls
+          common={common}
+          onChange={setCommon}
+          usesMouse={effect.usesMouse ?? false}
+          shader={shader}
+          quality={shader || is3d}
+          drawingPath={drawing === '_path'}
+          onDrawPath={(on) => setDrawing(on ? '_path' : null)}
+        />
       </aside>
 
       {codeOpen && <CodeDrawer effect={effect} values={values} common={common} link={link} onClose={closeCode} />}

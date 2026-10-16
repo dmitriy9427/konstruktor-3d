@@ -19,7 +19,36 @@ export type Common = {
   sleep: number
   /** Потолок кадров в секунду (0 — без лимита). */
   fps: number
+  /** Траектория «точки влияния»: нет, круг, восьмёрка, волна или своя. */
+  path: 'none' | 'circle' | 'eight' | 'wave' | 'custom'
+  /** Своя траектория: «x,y;x,y…» (доли холста, y вверх). */
+  pathPoints: string
+  /** Кругов за 10 секунд. */
+  pathSpeed: number
+  /** idle — по пути, только пока мыши нет над эффектом; always — всегда. */
+  pathMode: 'idle' | 'always'
+  /** Замкнуть свою траекторию (иначе — туда и обратно). */
+  pathClosed: boolean
   post: PostOptions
+}
+
+const PATH_KINDS = ['none', 'circle', 'eight', 'wave', 'custom'] as const
+
+/** Точки готовых траекторий (доли холста). */
+export function pathPoints(c: Pick<Common, 'path' | 'pathPoints'>): [number, number][] {
+  const ring = (f: (a: number) => [number, number]) => Array.from({ length: 24 }, (_, i) => f((i / 24) * Math.PI * 2))
+  switch (c.path) {
+    case 'circle':
+      return ring((a) => [0.5 + Math.cos(a) * 0.3, 0.5 + Math.sin(a) * 0.3])
+    case 'eight':
+      return ring((a) => [0.5 + Math.sin(a) * 0.32, 0.5 + Math.sin(a * 2) * 0.2])
+    case 'wave':
+      return Array.from({ length: 12 }, (_, i) => [0.1 + (i / 11) * 0.8, 0.5 + Math.sin(i * 1.1) * 0.2])
+    case 'custom':
+      return parsePoints(c.pathPoints, 64).map(([x, y]) => [x, y])
+    default:
+      return []
+  }
 }
 
 /** Общие настройки → опции рантайма (createEffect / createScene). */
@@ -30,6 +59,10 @@ export const runtimeOptions = (c: Common) => ({
   pauseOffscreen: c.offscreen,
   sleepAfter: c.sleep,
   maxFps: c.fps,
+  path:
+    c.path === 'none' || !pathPoints(c).length
+      ? null
+      : { points: pathPoints(c), closed: c.path === 'wave' ? false : c.path === 'custom' ? c.pathClosed : true, speed: c.pathSpeed, mode: c.pathMode },
 })
 
 export const DEFAULT_COMMON: Common = {
@@ -39,6 +72,11 @@ export const DEFAULT_COMMON: Common = {
   offscreen: true,
   sleep: 0,
   fps: 0,
+  path: 'none',
+  pathPoints: '',
+  pathSpeed: 1,
+  pathMode: 'idle',
+  pathClosed: true,
   post: { grain: 0, chroma: 0, vignette: 0, bloom: 0 },
 }
 
@@ -142,6 +180,11 @@ export function toSearch(effectId: string, params: Params, values: Values, commo
   if (common.offscreen !== DEFAULT_COMMON.offscreen) p.set('_offscreen', common.offscreen ? '1' : '0')
   if (common.sleep !== DEFAULT_COMMON.sleep) p.set('_sleep', String(common.sleep))
   if (common.fps !== DEFAULT_COMMON.fps) p.set('_fps', String(common.fps))
+  if (common.path !== DEFAULT_COMMON.path) p.set('_path', common.path)
+  if (common.path === 'custom' && common.pathPoints) p.set('_pathPoints', common.pathPoints)
+  if (common.pathSpeed !== DEFAULT_COMMON.pathSpeed) p.set('_pathSpeed', String(common.pathSpeed))
+  if (common.pathMode !== DEFAULT_COMMON.pathMode) p.set('_pathMode', common.pathMode)
+  if (common.pathClosed !== DEFAULT_COMMON.pathClosed) p.set('_pathClosed', common.pathClosed ? '1' : '0')
   for (const key of Object.keys(DEFAULT_COMMON.post) as (keyof PostOptions)[]) {
     if (common.post[key]) p.set(`_${key}`, String(common.post[key]))
   }
@@ -166,6 +209,13 @@ export function fromSearch(search: string, paramsOf: (id: string) => Params | un
     offscreen: p.has('_offscreen') ? p.get('_offscreen') === '1' : DEFAULT_COMMON.offscreen,
     sleep: num('_sleep', DEFAULT_COMMON.sleep, 0, 60),
     fps: [0, 30, 60].includes(num('_fps', 0, 0, 60)) ? num('_fps', 0, 0, 60) : 0,
+    path: (PATH_KINDS as readonly string[]).includes(p.get('_path') ?? '') ? (p.get('_path') as Common['path']) : DEFAULT_COMMON.path,
+    pathPoints: parsePoints(p.get('_pathPoints') ?? '', 64)
+      .map((pt) => pt.slice(0, 2).map((n) => +n.toFixed(3)).join(','))
+      .join(';'),
+    pathSpeed: num('_pathSpeed', DEFAULT_COMMON.pathSpeed, 0.1, 5),
+    pathMode: p.get('_pathMode') === 'always' ? 'always' : 'idle',
+    pathClosed: p.has('_pathClosed') ? p.get('_pathClosed') === '1' : DEFAULT_COMMON.pathClosed,
     post: {
       grain: num('_grain', 0, 0, 1),
       chroma: num('_chroma', 0, 0, 1),

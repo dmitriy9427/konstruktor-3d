@@ -272,3 +272,17 @@ test('«Космос»: своё созвездие рисуется клика�
   await ctl.getByRole('button', { name: 'Готово' }).click()
   await expect(page.locator('.draw-layer')).toHaveCount(0)
 })
+
+test('траектория: своя рисуется кликами по превью, попадает в адрес и в экспорт', async ({ page }) => {
+  await page.goto('studio.html?e=cells')
+  const panel = page.locator('.panel')
+  await panel.getByText('Своя', { exact: true }).click()
+  await panel.getByRole('button', { name: 'Рисовать' }).click()
+  const box = (await page.locator('.preview').boundingBox())!
+  for (const [x, y] of [[0.2, 0.2], [0.8, 0.3], [0.5, 0.8]]) await page.mouse.click(box.x + box.width * x, box.y + box.height * y)
+  await expect(page.locator('.draw-layer__path circle')).toHaveCount(3)
+  await panel.getByRole('button', { name: 'Готово' }).click()
+  await expect(page).toHaveURL(/_path=custom&_pathPoints=/)
+  await page.getByRole('button', { name: 'Забрать код' }).click()
+  await expect(page.getByRole('dialog').locator('code')).toContainText('"path": {')
+})

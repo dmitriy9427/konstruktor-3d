@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { EFFECTS, effectById } from '../effects'
 import type { SelectParam } from '../runtime/runtime'
-import { DEFAULT_COMMON, changedValues, fromSearch, hslToHex, randomValues, resolveValues, sanitize, toSearch } from './params'
+import { DEFAULT_COMMON, changedValues, fromSearch, hslToHex, pathPoints, randomValues, resolveValues, runtimeOptions, sanitize, toSearch } from './params'
 
 const lava = effectById('cells')!
 const paramsOf = (id: string) => effectById(id)?.params
@@ -31,6 +31,20 @@ describe('точки (своё созвездие)', () => {
   it('разбирает «x,y,c;…», зажимает в 0…1 и отбрасывает мусор', () => {
     const p = { type: 'points', label: '', default: '', max: 3 } as const
     expect(sanitize(p, '0.5,0.5,0;2,-1;abc;0.1,0.2,1;0.3,0.3,1')).toBe('0.5,0.5,0;1,0,1;0.1,0.2,1')
+  })
+})
+
+describe('траектория', () => {
+  it('готовые пути — точки внутри кадра; своя — из адреса туда и обратно', () => {
+    for (const path of ['circle', 'eight', 'wave'] as const) {
+      const pts = pathPoints({ path, pathPoints: '' })
+      expect(pts.length).toBeGreaterThan(5)
+      for (const [x, y] of pts) expect(x >= 0 && x <= 1 && y >= 0 && y <= 1).toBe(true)
+    }
+    const common = { ...DEFAULT_COMMON, path: 'custom' as const, pathPoints: '0.1,0.2;0.5,0.9', pathSpeed: 2, pathMode: 'always' as const, pathClosed: false }
+    const back = fromSearch(toSearch('cells', effectById('cells')!.params, resolveValues(effectById('cells')!.params), common), paramsOf, 'cells')
+    expect(back.common).toEqual(common)
+    expect(runtimeOptions(common).path).toEqual({ points: [[0.1, 0.2], [0.5, 0.9]], closed: false, speed: 2, mode: 'always' })
   })
 })
 

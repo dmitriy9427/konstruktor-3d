@@ -204,6 +204,11 @@ export function createEffect(canvas, spec, options = {}) {
     sleepAfter: 0,
     /** Не больше стольких кадров в секунду (0 — сколько даёт экран). */
     maxFps: 0,
+    /**
+     * Траектория: «точка влияния» (то, на что эффект реагирует мышью) летит по пути.
+     * { points: [[x, y], …] (доли холста, y вверх), closed, speed (кругов за 10 с), mode: 'idle' | 'always' }
+     */
+    path: null,
     ...options,
     post: { ...DEFAULT_POST, ...options.post },
   }
@@ -426,6 +431,7 @@ export function createEffect(canvas, spec, options = {}) {
 
   // ─── Цикл кадров ──────────────────────────────────────────────────────────
   let visible = true
+  let pathTime = 0
   let paused = false
   let frame = 0
   let time = spec.startTime ?? 4
@@ -473,10 +479,20 @@ export function createEffect(canvas, spec, options = {}) {
       if (slide.idle >= Number(values.autoplay)) goTo(slide.to + 1, 1)
     }
     const k = 1 - Math.exp(-dt * (1 / Math.max(opts.inertia, 0.001)) * 0.25)
-    const follow = opts.mouse && !opts.reducedMotion
-    pointer.x += ((follow ? pointer.tx : 0.5) - pointer.x) * k
-    pointer.y += ((follow ? pointer.ty : 0.5) - pointer.y) * k
-    pointer.active += ((follow ? pointer.tactive : 0) - pointer.active) * k
+    // Траектория: когда мыши нет (или всегда) цель — точка на пути.
+    let tx = pointer.tx
+    let ty = pointer.ty
+    let ta = opts.mouse ? pointer.tactive : 0
+    const path = opts.path?.points?.length ? opts.path : null
+    if (path && (path.mode === 'always' || !ta)) {
+      if (running()) pathTime += dt * (path.speed ?? 1) * 0.1
+      ;[tx, ty] = pathPoint(path.points, path.closed !== false, pathTime)
+      ta = 1
+    }
+    const follow = !opts.reducedMotion && (opts.mouse || path)
+    pointer.x += ((follow ? tx : 0.5) - pointer.x) * k
+    pointer.y += ((follow ? ty : 0.5) - pointer.y) * k
+    pointer.active += ((follow ? ta : 0) - pointer.active) * k
     pointer.hover += (pointer.thover - pointer.hover) * Math.min(1, dt * 6)
     // Скорость мыши (доли холста в секунду) — чтобы «толкать» воду сильнее при быстром движении.
     pointer.vx = (pointer.x - (pointer.px ?? pointer.x)) / Math.max(dt, 1e-3)
@@ -728,6 +744,39 @@ export function createEffect(canvas, spec, options = {}) {
       gl.getExtension('WEBGL_lose_context')?.loseContext()
     },
   }
+}
+
+/**
+ * Точка на траектории: сглаженная кривая (Catmull–Rom) через точки пути.
+ * t — 0…1 (по кругу для замкнутого пути, туда-обратно для открытого).
+ * Точки — доли холста (0…1, y вверх). Скорость по пути примерно равномерная:
+ * каждый отрезок получает время по своей длине.
+ */
+function pathPoint(points, closed, t) {
+  const n = points.length
+  if (n === 1) return points[0]
+  const segs = closed ? n : n - 1
+  const at = (i) => points[closed ? ((i % n) + n) % n : Math.min(n - 1, Math.max(0, i))]
+  const lengths = []
+  let total = 0
+  for (let i = 0; i < segs; i++) {
+    const a = at(i)
+    const b = at(i + 1)
+    total += Math.hypot(b[0] - a[0], b[1] - a[1]) || 1e-6
+    lengths.push(total)
+  }
+  let u = closed ? ((t % 1) + 1) % 1 : 1 - Math.abs(((t % 2) + 2) % 2 - 1)
+  u *= total
+  let i = lengths.findIndex((l) => l >= u)
+  if (i < 0) i = segs - 1
+  const start = i ? lengths[i - 1] : 0
+  const s = (u - start) / (lengths[i] - start || 1)
+  const p0 = at(i - 1)
+  const p1 = at(i)
+  const p2 = at(i + 1)
+  const p3 = at(i + 2)
+  const cr = (a, b, c, d) => 0.5 * (2 * b + (c - a) * s + (2 * a - 5 * b + 4 * c - d) * s * s + (3 * b - a - 3 * c + d) * s * s * s)
+  return [cr(p0[0], p1[0], p2[0], p3[0]), cr(p0[1], p1[1], p2[1], p3[1])]
 }
 
 /** Значения по умолчанию из описания параметров. */
