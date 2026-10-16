@@ -132,7 +132,7 @@ export const waves: EffectDef = {
     { name: 'Шторм', values: { cycle: 'slider', timeOfDay: 3, amplitude: 1.3, choppy: 0.85, speed: 1.5, frequency: 5 } },
     { name: 'Ночь', values: { cycle: 'slider', timeOfDay: 4, sunSize: 0.6, glitter: 1.4 } },
     { name: 'Сутки по прокрутке', values: { cycle: 'scroll' } },
-    { name: 'Бассейн сверху', values: { horizon: 0, deep: '#0a4a6e', shallow: '#3fc2d9', amplitude: 0.25, choppy: 0, frequency: 12, speed: 0.4, glitter: 0.6, rain: 0.15, damping: 0.99, stretch: 1 } },
+    { name: 'Бассейн сверху', values: { horizon: 0, deep: '#0a4a6e', shallow: '#3fc2d9', amplitude: 0.25, choppy: 0, frequency: 12, speed: 0.4, glitter: 0.6, rain: 0.3, damping: 0.99, stretch: 1 } },
   ],
   simulation: {
     size: 256,
@@ -176,6 +176,8 @@ void main() {
 float gFlash;     // яркость вспышки молнии в этом кадре
 float gBoltX;     // где бьёт молния (по горизонтали экрана)
 float gBoltSeed;
+float gBoltEnd;   // где разряд касается воды (по вертикали экрана): ниже — ближе к нам
+float gBoltNear;  // 0 — у горизонта, 1 — совсем близко
 
 vec3 sunDir() {
   float el = radians(gSunH);
@@ -211,8 +213,10 @@ float swell(vec2 p, float sharp) {
 float seaHeight(vec2 x, float t, float footprint) {
   vec2 p = x * vec2(1.0 / uStretch, 1.0);     // вытягиваем вдоль горизонта
   float f = uFrequency * 0.06;
-  float amp = 0.55 * uAmplitude * (1.0 + gStorm * 0.6);
-  float sharp = 4.0 - uChoppy * 2.8;
+  // В шторм море бушует: валы вдвое выше, гребни острее, бегут быстрее.
+  float amp = 0.55 * uAmplitude * (1.0 + gStorm * 1.4);
+  float sharp = max(1.0, 4.0 - uChoppy * 2.8 - gStorm * 1.2);
+  t *= 1.0 + gStorm * 0.8;
   float h = 0.0;
   for (int i = 0; i < 5; i++) {
     float lambda = 6.2832 / f;
@@ -247,15 +251,31 @@ float rainRipples(vec2 x, float footprint, out float splash) {
     vec2 id = base + vec2(float(i), float(j));
     float t = uTime * 1.1 + hash(id * 3.1);
     float ph = fract(t);
-    if (hash(id + floor(t) * 7.7) > gRain) continue;
-    vec2 c = (id + 0.25 + 0.5 * hash2(id + floor(t))) * CELL;
+    // Даже слабый дождь заметен: вероятность капли в ячейке растёт быстрее силы дождя.
+    if (hash(id + floor(t) * 7.7) > min(1.0, gRain * 2.0)) continue;
+    vec2 c = (id + 0.3 + 0.4 * hash2(id + floor(t))) * CELL;
     float d = length(x - c);
-    float r = ph * 0.5;
-    float k = (1.0 - ph) * (1.0 - ph);
-    h += sin((d - r) * 50.0) * exp(-abs(d - r) * 22.0) * k * smoothstep(0.2, 0.5, 0.13 / footprint);
-    splash += exp(-d / (0.03 + footprint * 1.5)) * smoothstep(0.18, 0.0, ph);
+    // Кольцо не больше ~половины ячейки — иначе его обрезали бы края ячейки (квадраты).
+    float r = ph * 0.26;
+    float k = (1.0 - ph) * (1.0 - ph) * smoothstep(0.3, 0.2, d);
+    h += sin((d - r) * 60.0) * exp(-abs(d - r) * 30.0) * k * smoothstep(0.2, 0.5, 0.12 / footprint);
+    splash += exp(-d / 0.03) * smoothstep(0.2, 0.0, ph) * smoothstep(0.3, 0.15, footprint);
   }
-  return h * 0.025;
+  return h * 0.05;
+}
+
+// Вдали, где круги мельче пикселя, капли видны всплесками-искрами. Их считаем
+// в координатах экрана: сетка ячеек, в каждой — своя вспышка в свой момент.
+float farSplashes(vec2 p, float footprint) {
+  if (gRain <= 0.0) return 0.0;
+  vec2 g = p * vec2(70.0, 140.0);
+  vec2 id = floor(g);
+  float t = uTime * 2.0 + hash(id * 1.3);
+  float ph = fract(t);
+  if (hash(id + floor(t) * 3.1) > gRain * 0.6) return 0.0;
+  vec2 c = 0.25 + 0.5 * hash2(id + floor(t));
+  float d = length((fract(g) - c) * vec2(1.0, 0.5));
+  return smoothstep(0.22, 0.0, d) * smoothstep(0.35, 0.0, ph) * smoothstep(0.08, 0.4, footprint);
 }
 
 float heightAt(vec2 x, float t, float footprint) {
@@ -279,6 +299,8 @@ vec3 rainStreaks(vec2 p) {
     float line = smoothstep(0.06, 0.0, abs(f.x - x)) * smoothstep(head - 0.45, head, f.y) * step(f.y, head);
     sum += line * present * (0.55 - fi * 0.12);
   }
+  // Сверху (горизонт за кадром) капли летят на нас — штрихов почти не видно, видны круги.
+  sum *= smoothstep(0.0, 0.45, uHorizon);
   return gHor * sum * 0.6 + vec3(gFlash * sum * 0.4);
 }
 
@@ -288,20 +310,26 @@ void setupLightning() {
   float ph = fract(uTime * 0.6);
   float on = step(hash(vec2(slot, 3.0)), gLightning * 0.55);
   gFlash = on * (exp(-ph * 16.0) + 0.7 * exp(-abs(ph - 0.12) * 45.0));
-  gBoltX = hash(vec2(slot, 9.0)) * 1.4 - 0.7;
+  // В пределах кадра при любых пропорциях холста.
+  gBoltX = (hash(vec2(slot, 9.0)) * 2.0 - 1.0) * 0.38 * uResolution.x / uResolution.y;
   gBoltSeed = slot;
+  gBoltNear = pow(hash(vec2(slot, 21.0)), 1.5);
+  gBoltEnd = pitch() - gBoltNear * 0.38;
 }
 
-// Разряд: ломаная от верха кадра до горизонта.
+// Разряд: ломаная от верха кадра до воды. Ближний удар — ниже на экране,
+// толще и ярче, а в точке удара по воде расходится вспышка.
 vec3 bolt(vec2 p) {
-  if (gFlash <= 0.01 || p.y < pitch()) return vec3(0.0);
+  if (gFlash <= 0.01 || p.y < gBoltEnd - 0.03) return vec3(0.0);
   float y = p.y;
   float x = gBoltX + (fbm(vec2(y * 2.5, gBoltSeed)) - 0.5) * 0.5 + (noise(vec2(y * 30.0, gBoltSeed)) - 0.5) * 0.05;
   float d = abs(p.x - x);
-  float core = smoothstep(0.004, 0.0, d);
-  float glow = exp(-d * 70.0) * 0.5;
-  float top = smoothstep(pitch(), pitch() + 0.05, y);   // не ниже горизонта
-  return vec3(0.9, 0.93, 1.0) * (core + glow) * gFlash * top;
+  float w = 0.004 * (1.0 + gBoltNear * 2.5);
+  float core = smoothstep(w, 0.0, d) * step(gBoltEnd, y);
+  float glow = exp(-d * 70.0 / (1.0 + gBoltNear * 2.0)) * 0.5 * step(gBoltEnd, y);
+  float xEnd = gBoltX + (fbm(vec2(gBoltEnd * 2.5, gBoltSeed)) - 0.5) * 0.5;
+  float impact = exp(-length((p - vec2(xEnd, gBoltEnd)) * vec2(1.0, 3.0)) * 14.0) * (0.4 + gBoltNear);
+  return vec3(0.9, 0.93, 1.0) * (core + glow + impact) * gFlash;
 }
 
 void main() {
@@ -349,11 +377,11 @@ void main() {
   float spark = pow(max(dot(refl, sd), 0.0), 600.0 / uSunSize);
   col += gSun * spark * uGlitter * 4.0 * smoothstep(-0.15, 0.1, sd.y) * (1.0 - gStorm * 0.8);
   // Всплески капель.
-  col += gHor * splash * gRain * 0.5;
+  col += mix(gHor, vec3(1.0), 0.5) * (splash * min(1.0, gRain * 2.0) * 0.7 + farSplashes(p, footprint) * 0.55);
 
   // Дымка: вдали вода растворяется в небе у горизонта.
   float fog = 1.0 - exp(-dist * gHaze * 0.045);
   col = mix(col, sky(normalize(vec3(rd.x, 0.02, rd.z)), 0.0), fog);
-  fragColor = vec4(col + rainStreaks(p), 1.0);
+  fragColor = vec4(col + bolt(p) + rainStreaks(p), 1.0);
 }`,
 }
