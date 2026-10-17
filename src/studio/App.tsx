@@ -7,7 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { CATEGORIES, EFFECTS, effectById } from '../effects'
 import { decodeCode, encodeCode, makeCustomEffect, parseParams, TEMPLATES } from '../engine/custom'
-import { buildFragment } from '../runtime/runtime'
+import { buildFragment, parseList } from '../runtime/runtime'
 import { DEFAULT_COMMON, fromSearch, pathPoints, randomValues, resolveValues, toSearch, type Common } from '../engine/params'
 import { mountPerf } from '../engine/perf'
 import type { Values } from '../runtime/runtime'
@@ -173,6 +173,16 @@ export function App() {
             if (!drawing) return
             if (drawing === '_path') {
               setCommon((c) => ({ ...c, path: 'custom', pathPoints: [c.pathPoints, `${x.toFixed(3)},${y.toFixed(3)}`].filter(Boolean).join(';') }))
+              return
+            }
+            const target = effect.params[drawing]
+            if (target?.type === 'list') {
+              // Новый объект списка — в месте клика, остальные поля по умолчанию.
+              setValues((prev) => {
+                const items = parseList(prev[drawing], target)
+                return { ...prev, [drawing]: JSON.stringify([...items, { ...resolveValues(target.fields), x: +x.toFixed(3), y: +y.toFixed(3) }]) }
+              })
+              setDrawing(null)
               return
             }
             setValues((prev) => {

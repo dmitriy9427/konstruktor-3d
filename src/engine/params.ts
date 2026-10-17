@@ -3,7 +3,7 @@
  * Чистые функции — проверяются тестами (params.test.ts).
  */
 import type { Param, Params, PostOptions, Values } from '../runtime/runtime'
-import { defaultsOf, parsePoints } from '../runtime/runtime'
+import { defaultsOf, parseList, parsePoints } from '../runtime/runtime'
 
 /** Общие настройки любого эффекта (не зависят от его параметров). */
 export type Common = {
@@ -99,6 +99,10 @@ export function sanitize(param: Param, value: unknown): Values[string] {
       return value === true || value === 'true' || value === '1' || value === 1
     case 'select':
       return param.options.some((o) => o.value === value) ? String(value) : param.default
+    case 'list':
+      return JSON.stringify(
+        parseList(value, param).map((item) => resolveValues(param.fields, item as Partial<Values>)),
+      )
     case 'points':
       return parsePoints(value, param.max)
         .map((p) => p.map((n) => +n.toFixed(3)).join(','))

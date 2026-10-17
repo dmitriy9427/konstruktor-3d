@@ -129,15 +129,39 @@ export function parsePoints(value, max = 32) {
     .map(([x, y, c = 1]) => [Math.min(1, Math.max(0, x)), Math.min(1, Math.max(0, y)), c ? 1 : 0])
 }
 
+/**
+ * Параметр «список» (например, свои галактики): JSON-массив объектов, у
+ * каждого — свои поля (fields). В шейдере — по массиву на поле и число:
+ * galaxies с полями size, color → uGalaxiesSize[max], uGalaxiesColor[max], uGalaxiesCount.
+ */
+export function parseList(value, param) {
+  let items
+  try {
+    items = typeof value === 'string' ? JSON.parse(value || '[]') : value
+  } catch {
+    items = []
+  }
+  if (!Array.isArray(items)) items = []
+  return items.slice(0, param.max ?? 8).map((item) => ({ ...defaultsOf(param.fields), ...(item && typeof item === 'object' ? item : {}) }))
+}
+
+const fieldName = (key, field) => `${uniformName(key)}${field[0].toUpperCase()}${field.slice(1)}`
+
 /** Объявления uniform для параметров (текст в шейдер не уходит). */
 function declarations(params) {
   return Object.entries(params)
     .filter(([, param]) => param.type !== 'text')
-    .map(([key, param]) =>
-      param.type === 'points'
-        ? `uniform vec3 ${uniformName(key)}[${param.max ?? 32}];\nuniform float ${uniformName(key)}Count;`
-        : `uniform ${glslType(param)} ${uniformName(key)};`,
-    )
+    .map(([key, param]) => {
+      if (param.type === 'points') return `uniform vec3 ${uniformName(key)}[${param.max ?? 32}];\nuniform float ${uniformName(key)}Count;`
+      if (param.type === 'list') {
+        const max = param.max ?? 8
+        return [
+          ...Object.entries(param.fields).map(([f, fp]) => `uniform ${glslType(fp)} ${fieldName(key, f)}[${max}];`),
+          `uniform float ${uniformName(key)}Count;`,
+        ].join('\n')
+      }
+      return `uniform ${glslType(param)} ${uniformName(key)};`
+    })
     .join('\n')
 }
 
@@ -536,6 +560,23 @@ export function createEffect(canvas, spec, options = {}) {
     gl.uniform1f(program.loc('uScroll'), scrollProgress())
     for (const [key, param] of Object.entries(spec.params)) {
       if (param.type === 'text') continue
+      if (param.type === 'list') {
+        const max = param.max ?? 8
+        const items = parseList(values[key], param)
+        for (const [f, fp] of Object.entries(param.fields)) {
+          const vec = fp.type === 'color'
+          const data = new Float32Array(max * (vec ? 3 : 1))
+          items.forEach((item, i) => {
+            const v = uniformValue(fp, item[f])
+            if (vec) data.set(v, i * 3)
+            else data[i] = v
+          })
+          if (vec) gl.uniform3fv(program.loc(`${fieldName(key, f)}[0]`), data)
+          else gl.uniform1fv(program.loc(`${fieldName(key, f)}[0]`), data)
+        }
+        gl.uniform1f(program.loc(`${uniformName(key)}Count`), items.length)
+        continue
+      }
       if (param.type === 'points') {
         const max = param.max ?? 32
         const pts = parsePoints(values[key], max)

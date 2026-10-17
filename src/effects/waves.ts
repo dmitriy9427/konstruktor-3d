@@ -22,19 +22,27 @@ import type { EffectDef } from './types'
 
 /** Общее для обоих шейдеров: камера, участок симуляции, сцена (цвета и погода). */
 const SHARED = /* glsl */ `
-const float CAM_H = 1.2;
+const float CAM_H0 = 1.2;
+float gSway;   // сила качки: «Качка» + шторм
+float gStorm;  // 0…1 — насколько сейчас шторм
+// Качка — как с палубы: камера поднимается и опускается, кивает и заваливается.
+// В шторм камера выше: над ней не должны смыкаться валы.
+float camH() { return CAM_H0 * (1.0 + 0.28 * gSway * sin(uTime * 0.55)) + gStorm * 0.9; }
 // Участок моря под «живой» водой: x от −4 до 4, z (вдаль) от 0.3 до 8.3.
 const vec2 PATCH_MIN = vec2(-4.0, 0.3);
 const float PATCH = 8.0;
 
 // Луч камеры для точки экрана: «Линия горизонта» поднимает и опускает взгляд.
-float pitch() { return mix(0.6, 0.0, uHorizon); }
-vec3 rayDir(vec2 p) { return normalize(vec3(p.x, p.y - pitch(), 1.0)); }
+float pitch() { return mix(0.6, 0.0, uHorizon) + 0.07 * gSway * sin(uTime * 0.43 + 1.3); }
+vec3 rayDir(vec2 p) {
+  p = rot(0.09 * gSway * sin(uTime * 0.37)) * p;   // крен
+  return normalize(vec3(p.x, p.y - pitch(), 1.0));
+}
 // Точка на воде (y = 0) под лучом: доли холста → координаты моря.
 vec2 waterAt(vec2 screen01) {
   vec2 p = (screen01 - 0.5) * vec2(uResolution.x / uResolution.y, 1.0);
   vec3 rd = rayDir(p);
-  return rd.xz * (CAM_H / max(-rd.y, 0.02));
+  return rd.xz * (camH() / max(-rd.y, 0.02));
 }
 
 // ─── Сцена ───────────────────────────────────────────────────────────────
@@ -50,7 +58,7 @@ const float T_HAZE[5] = float[5](1.2, 0.5, 0.9, 1.6, 0.7);
 const float T_STORM[5] = float[5](0.0, 0.0, 0.0, 1.0, 0.0);
 
 vec3 gTop, gHor, gSun, gDeep, gLit;
-float gSunH, gHaze, gStorm, gRain, gLightning;
+float gSunH, gHaze, gRain, gLightning;
 
 // Где мы в таблице: 0…4 (дробное — между сценами). Отрицательное — свои цвета.
 float sceneIndex() {
@@ -76,6 +84,7 @@ void setupScene() {
   }
   gRain = max(uRain, gStorm * 0.8);
   gLightning = max(uLightning, gStorm * 0.7);
+  gSway = uSway + gStorm * 1.3;
 }
 `
 
@@ -93,6 +102,7 @@ export const waves: EffectDef = {
     choppy: { type: 'number', label: 'Острота гребней', min: 0, max: 1, step: 0.01, default: 0.45, hint: '0 — мягкая зыбь, 1 — острые штормовые гребни' },
     stretch: { type: 'number', label: 'Вытянутость вдоль горизонта', min: 1, max: 4, step: 0.01, default: 2.2, hint: 'Насколько валы вытянуты поперёк взгляда, как в открытом море' },
     detail: { type: 'number', label: 'Мелкая рябь', min: 0, max: 1, step: 0.01, default: 0.5, hint: 'Мелкие волны поверх крупных' },
+    sway: { type: 'number', label: 'Качка', min: 0, max: 2, step: 0.01, default: 0, hint: 'Камера качается, как на палубе: поднимается, кивает и заваливается. В шторм качает сильно само' },
     horizon: { type: 'number', label: 'Линия горизонта', min: 0, max: 1, step: 0.01, default: 0.6, hint: '0 — смотрим на воду сверху, неба не видно; 1 — горизонт посередине кадра' },
     cycle: {
       type: 'select',
@@ -213,15 +223,18 @@ float swell(vec2 p, float sharp) {
 
 // Высота моря: 5 октав валов; каждая следующая мельче, слабее и повёрнута.
 // Мелкие октавы вдали гаснут — они мельче пикселя и только рябили бы.
-float seaHeight(vec2 x, float t, float footprint) {
+// octaves — сколько октав считать: для поиска поверхности хватает 2 крупных.
+float seaHeight(vec2 x, float t, float footprint, int octaves) {
   vec2 p = x * vec2(1.0 / uStretch, 1.0);     // вытягиваем вдоль горизонта
   float f = uFrequency * 0.06;
-  // В шторм море бушует: валы вдвое выше, гребни острее, бегут быстрее.
-  float amp = 0.55 * uAmplitude * (1.0 + gStorm * 1.4);
+  // В шторм море бушует: валы втрое выше и длиннее, гребни острее, бегут быстрее.
+  float amp = 0.55 * uAmplitude * (1.0 + gStorm * 2.4);
+  f *= 1.0 - gStorm * 0.4;
   float sharp = max(1.0, 4.0 - uChoppy * 2.8 - gStorm * 1.2);
   t *= 1.0 + gStorm * 0.8;
   float h = 0.0;
   for (int i = 0; i < 5; i++) {
+    if (i >= octaves) break;
     float lambda = 6.2832 / f;
     float fade = smoothstep(1.2, 4.0, lambda / footprint) * (i < 2 ? 1.0 : uDetail * 1.6);
     h += (swell((p + t) * f, sharp) + swell((p - t) * f, sharp)) * amp * fade;
@@ -287,7 +300,7 @@ float farSplashes(vec2 p, float footprint) {
 }
 
 float heightAt(vec2 x, float t, float footprint) {
-  return seaHeight(x, t, footprint) + liveWater(x) * 0.6;
+  return seaHeight(x, t, footprint, 5) + liveWater(x) * 0.6;
 }
 
 // Падающие капли — штрихи поверх кадра в трёх слоях (ближние крупнее и быстрее).
@@ -359,10 +372,25 @@ void main() {
     return;
   }
 
-  float dist = CAM_H / -rd.y;
-  vec2 x = rd.xz * dist;
+  // Поиск поверхности (трассировка карты высот): идём по лучу, пока он не
+  // окажется ниже воды. Ближний вал закрывает воду за собой — гребни видны
+  // объёмом, а не только светом. Высота — по 2 крупным октавам (быстро).
+  float LIFT = mix(0.18, 0.26, gStorm);   // во сколько раз «высота» волн поднимает воду
+  vec3 ro = vec3(0.0, camH(), 0.0);
+  float dist = camH() / -rd.y;   // плоскость — запасной вариант
+  // Выше самого высокого гребня воды быть не может — с этой высоты и начинаем.
+  float hMax = 2.6 * 0.55 * uAmplitude * (1.0 + gStorm * 2.4) * LIFT;
+  float tt = max(0.0, (camH() - hMax) / -rd.y);
+  for (int i = 0; i < 28; i++) {
+    vec3 pos = ro + rd * tt;
+    float above = pos.y - seaHeight(pos.xz, t, 0.002, 2) * LIFT;
+    if (above < 0.002 + tt * 0.0015) { dist = tt; break; }
+    tt += max(above * 0.75, 0.01 + tt * 0.004);
+    if (tt > dist * 1.2) break;   // дальше плоскости не уйдём
+  }
+  vec2 x = (ro + rd * dist).xz;
   // Сколько единиц воды попадает в один пиксель (вдали — много).
-  float footprint = dist * dist / CAM_H / uResolution.y * 1.5 + 0.002;
+  float footprint = dist * dist / camH() / uResolution.y * 1.5 + 0.002;
 
   float e = 0.01 + footprint;
   float splash;

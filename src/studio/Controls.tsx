@@ -7,7 +7,7 @@
 import { useId, useState } from 'react'
 
 import type { Common } from '../engine/params'
-import type { Param, PostOptions, Values } from '../runtime/runtime'
+import { parseList, type ListParam, type Param, type PostOptions, type Values } from '../runtime/runtime'
 import { HintIcon, useHintId, WithHint } from './Hint'
 
 type ParamProps = {
@@ -55,6 +55,8 @@ function ParamInput({ name, param, value, onChange, drawing, newStroke, onDraw, 
   const id = useId()
   const described = useHintId()
   switch (param.type) {
+    case 'list':
+      return <ListControl param={param} value={String(value)} onChange={onChange} picking={Boolean(drawing)} onPick={(on) => onDraw?.(on)} />
     case 'points': {
       const points = String(value).split(';').filter(Boolean)
       return (
@@ -213,6 +215,74 @@ export function Toggle({ id, label, checked, onChange }: { id: string; label: st
       </span>
       <input id={id} className="switch" type="checkbox" role="switch" checked={checked} aria-describedby={described} onChange={(e) => onChange(e.currentTarget.checked)} />
     </label>
+  )
+}
+
+/**
+ * Список объектов (свои галактики): вкладки по объектам, поля выбранного,
+ * «Добавить» — следующий клик по превью ставит новый объект в это место.
+ */
+function ListControl({ param, value, onChange, picking, onPick }: { param: ListParam; value: string; onChange: (v: string) => void; picking: boolean; onPick: (on: boolean) => void }) {
+  const items = parseList(value, param)
+  const [selected, setSelected] = useState(0)
+  const index = Math.min(selected, items.length - 1)
+  // Добавили объект — сразу открываем его.
+  const [count, setCount] = useState(items.length)
+  if (items.length !== count) {
+    setCount(items.length)
+    if (items.length > count) setSelected(items.length - 1)
+  }
+  const update = (next: Values[]) => onChange(JSON.stringify(next))
+  const max = param.max ?? 8
+  return (
+    <div className="control list">
+      <span className="control__label">
+        <span>
+          {param.label}
+          <HintIcon />
+        </span>
+        <output className="control__value">
+          {items.length} / {max}
+        </output>
+      </span>
+      <div className="points">
+        <button
+          type="button"
+          className={`button button--small${picking ? ' button--primary' : ''}`}
+          aria-pressed={picking}
+          disabled={!picking && items.length >= max}
+          onClick={() => onPick(!picking)}
+        >
+          {picking ? 'Отмена' : `+ ${param.itemLabel}`}
+        </button>
+      </div>
+      {picking && <p className="points__help">Кликните по превью — туда встанет {param.itemLabel.toLowerCase()}</p>}
+      {items.length > 0 && (
+        <>
+          <div className="tabs list__tabs" role="tablist" aria-label={param.label}>
+            {items.map((_, i) => (
+              <button key={i} type="button" role="tab" className="tabs__tab" aria-selected={i === index} onClick={() => setSelected(i)}>
+                {param.itemLabel} {i + 1}
+              </button>
+            ))}
+          </div>
+          <div className="list__item">
+            {Object.entries(param.fields).map(([field, fp]) => (
+              <ParamControl
+                key={`${index}-${field}`}
+                name={field}
+                param={fp}
+                value={items[index][field]}
+                onChange={(v) => update(items.map((it, i) => (i === index ? { ...it, [field]: v } : it)))}
+              />
+            ))}
+            <button type="button" className="button button--small" onClick={() => update(items.filter((_, i) => i !== index))}>
+              Удалить {param.itemLabel.toLowerCase()} {index + 1}
+            </button>
+          </div>
+        </>
+      )}
+    </div>
   )
 }
 

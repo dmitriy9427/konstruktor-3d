@@ -48,6 +48,17 @@ describe('траектория', () => {
   })
 })
 
+describe('список объектов (свои галактики)', () => {
+  it('JSON-массив: недостающие поля — по умолчанию, лишнее — отброшено, кривое — пусто', () => {
+    const p = effectById('space')!.params.myGalaxies
+    const v = JSON.parse(sanitize(p, '[{"x":0.2,"size":99,"type":"ring"},{"type":"nope"}]') as string)
+    expect(v).toHaveLength(2)
+    expect(v[0]).toMatchObject({ x: 0.2, y: 0.5, size: 5, type: 'ring' })
+    expect(v[1].type).toBe('spiral')
+    expect(sanitize(p, 'не json')).toBe('[]')
+  })
+})
+
 describe('адрес Студии', () => {
   it('туда и обратно — без потерь', () => {
     const values = resolveValues(lava.params, { speed: 1.2, colorA: '#123456' })

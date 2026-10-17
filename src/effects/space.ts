@@ -61,9 +61,41 @@ export const space: EffectDef = {
     nebulaX: { type: 'number', label: 'Центр туманности X', min: 0, max: 1, step: 0.01, default: 0.6, hint: 'Где туманность ярче всего' },
     nebulaY: { type: 'number', label: 'Центр туманности Y', min: 0, max: 1, step: 0.01, default: 0.55, hint: 'Где туманность ярче всего' },
 
-    galaxies: { type: 'number', label: 'Далёкие галактики', min: 0, max: 1, step: 0.01, default: 0.3, hint: 'Сколько маленьких спиральных галактик вдали. 0 — нет' },
-    galaxySize: { type: 'number', label: 'Размер галактик', min: 0.3, max: 3, step: 0.01, default: 1, hint: 'Размер далёких галактик' },
-    galaxyColor: { type: 'color', label: 'Галактики', default: '#ffd9b0', hint: 'Цвет ядер галактик (рукава — с оттенком туманности)' },
+    galaxyField: { type: 'boolean', label: 'Россыпь далёких галактик', default: true, hint: 'Маленькие галактики разных типов вдали, в случайных местах' },
+    galaxies: { type: 'number', label: 'Сколько галактик', min: 0, max: 1, step: 0.01, default: 0.3, hint: 'Плотность россыпи', when: { galaxyField: [true] } },
+    galaxySize: { type: 'number', label: 'Размер далёких', min: 0.3, max: 3, step: 0.01, default: 1, hint: 'Размер галактик россыпи', when: { galaxyField: [true] } },
+    galaxyColor: { type: 'color', label: 'Цвет далёких', default: '#ffd9b0', hint: 'Цвет ядер галактик россыпи (рукава — с оттенком туманности)', when: { galaxyField: [true] } },
+    myGalaxies: {
+      type: 'list',
+      label: 'Свои галактики',
+      itemLabel: 'Галактика',
+      max: 8,
+      default: '[]',
+      hint: '«Добавить» и клик по превью — там появится галактика. У каждой свой тип, размер, наклон, вращение и цвет',
+      fields: {
+        type: {
+          type: 'select',
+          label: 'Тип',
+          options: [
+            { value: 'spiral', label: 'Спиральная' },
+            { value: 'barred', label: 'С перемычкой' },
+            { value: 'elliptical', label: 'Эллиптическая' },
+            { value: 'ring', label: 'Кольцевая' },
+          ],
+          default: 'spiral',
+        },
+        x: { type: 'number', label: 'Место по X', min: 0, max: 1, step: 0.01, default: 0.5 },
+        y: { type: 'number', label: 'Место по Y', min: 0, max: 1, step: 0.01, default: 0.5 },
+        size: { type: 'number', label: 'Размер', min: 0.2, max: 5, step: 0.01, default: 1.5 },
+        tilt: { type: 'number', label: 'Наклон диска', min: 0.1, max: 1, step: 0.01, default: 0.55, hint: '1 — видим плашмя, 0.1 — почти с ребра' },
+        angle: { type: 'number', label: 'Поворот, °', min: 0, max: 360, step: 1, default: 20 },
+        spin: { type: 'number', label: 'Вращение', min: -3, max: 3, step: 0.01, default: 0.4, hint: 'Скорость вращения; меньше нуля — в другую сторону' },
+        arms: { type: 'number', label: 'Рукава', min: 1, max: 6, step: 1, default: 2 },
+        twist: { type: 'number', label: 'Закрутка рукавов', min: 0.5, max: 5, step: 0.01, default: 2.2 },
+        bright: { type: 'number', label: 'Яркость', min: 0.2, max: 3, step: 0.01, default: 1.2 },
+        color: { type: 'color', label: 'Цвет', default: '#ffd9b0' },
+      },
+    },
     meteors: { type: 'number', label: 'Метеоры', min: 0, max: 1, step: 0.01, default: 0.4, hint: 'Как часто пролетают метеоры. 0 — нет' },
     meteorShape: {
       type: 'select',
@@ -128,6 +160,18 @@ export const space: EffectDef = {
   presets: [
     { name: 'Глубокий космос', values: { nebulaA: '#4b1d8f', nebulaB: '#0f6c8a' } },
     { name: 'Глубокое поле', values: { galaxies: 1, galaxySize: 1.3, nebula: 0.2, constellations: 'none', meteors: 0, density: 0.3 } },
+    {
+      name: 'Две галактики',
+      values: {
+        constellations: 'none',
+        galaxyField: false,
+        nebula: 0.4,
+        myGalaxies: JSON.stringify([
+          { type: 'spiral', x: 0.32, y: 0.62, size: 2.6, tilt: 0.5, angle: 25, spin: 0.5, arms: 2, twist: 2.4, bright: 1.4, color: '#ffd9b0' },
+          { type: 'barred', x: 0.72, y: 0.32, size: 1.6, tilt: 0.75, angle: 120, spin: -0.4, arms: 2, twist: 1.8, bright: 1.2, color: '#b6c8ff' },
+        ]),
+      },
+    },
     { name: 'Звездопад', values: { meteors: 1, meteorLength: 0.45, nebula: 0.4, constellations: 'none', meteorSpeed: 1.4 } },
     { name: 'Огненные шары', values: { meteors: 0.6, meteorShape: 'fireball', meteorColor: '#ffb36b', nebula: 0.5 } },
     { name: 'Атлас созвездий', values: { constellations: 'all', constStyle: 'draw', drawSpeed: 2, nebula: 0.35, meteors: 0.15, density: 0.6 } },
@@ -175,31 +219,61 @@ vec3 nebula(vec2 p, vec2 m) {
   return col * uNebula;
 }
 
-// ─── Далёкие галактики ──────────────────────────────────────────────────
-// Крупная сетка; в части ячеек — галактика: наклонённый диск (эллипс),
-// логарифмическая спираль рукавов (угол − ln r · закрутка) и яркое ядро.
-// Медленно вращается; лежит в самом дальнем слое (едет медленнее звёзд).
-vec3 galaxies(vec2 p) {
-  if (uGalaxies <= 0.0) return vec3(0.0);
+// ─── Галактики ─────────────────────────────────────────────────────────
+// Одна галактика в точке q (уже относительно центра). Тип: 0 — спиральная,
+// 1 — с перемычкой (бар через ядро, рукава от его концов), 2 — эллиптическая
+// (гладкий овал без рукавов), 3 — кольцевая (ядро и кольцо). Диск сжат в
+// эллипс (наклон) и повёрнут; рукава — логарифмическая спираль
+// cos(рукава · (угол − ln r · закрутка)), вращаются со временем.
+vec3 galaxy(vec2 q, float size, float tilt, float angle, float spin, float arms, float twist, float type, vec3 color, float bright) {
+  q = rot(angle) * q;
+  q.y /= max(tilt, 0.05);
+  float r = length(q) / size;
+  if (r > 3.0) return vec3(0.0);
+  float a = atan(q.y, q.x) + uTime * spin * 0.15;
+  float core = exp(-r * 9.0);
+  float disk = exp(-r * 1.8);
+  vec3 armColor = mix(color, uNebulaB + 0.3, 0.45);
+  float body;
+  if (type < 0.5) {
+    body = disk * pow(0.5 + 0.5 * cos(arms * (a - log(r + 0.05) * twist)), 2.0) * 0.55;
+  } else if (type < 1.5) {
+    vec2 rq = rot(-uTime * spin * 0.15) * q / size;
+    float bar = exp(-abs(rq.y) * 14.0) * smoothstep(0.75, 0.2, abs(rq.x)) * 0.6;
+    float arm = disk * pow(0.5 + 0.5 * cos(arms * (a - log(max(r, 0.35)) * twist)), 3.0) * smoothstep(0.3, 0.6, r) * 0.6;
+    body = bar + arm;
+  } else if (type < 2.5) {
+    body = exp(-r * 2.6) * 0.8;
+  } else {
+    body = exp(-pow((r - 1.0) * 5.0, 2.0)) * (0.55 + 0.45 * cos(a * arms + r * 4.0)) * 0.7;
+  }
+  return (armColor * body + color * core * 1.2) * bright;
+}
+
+// Россыпь далёких галактик: крупная сетка, в части ячеек — случайная галактика.
+vec3 galaxyField(vec2 p) {
+  if (uGalaxyField < 0.5 || uGalaxies <= 0.0) return vec3(0.0);
   vec2 g = p * 2.2;
   vec2 id = floor(g);
   vec2 h = hash2(id + 31.0);
   if (h.x > uGalaxies * 0.7) return vec3(0.0);
-  vec2 c = (hash2(id + 7.0) - 0.5) * 0.5;
-  vec2 q = fract(g) - 0.5 - c;
-  float tilt = 0.25 + h.y * 0.6;                       // наклон диска: эллипс
-  q = rot(hash(id) * 6.28) * q;
-  q.y /= tilt;
-  float size = (0.07 + h.y * 0.08) * uGalaxySize;
-  float r = length(q) / size;
-  if (r > 2.5) return vec3(0.0);
-  float a = atan(q.y, q.x) + uTime * 0.02 * (h.x > 0.3 ? 1.0 : -1.0);
-  float arms = 2.0 + floor(hash(id + 3.0) * 2.0);
-  float spiral = 0.5 + 0.5 * cos(arms * (a - log(r + 0.05) * 2.2));
-  float disk = exp(-r * 1.8);
-  float core = exp(-r * 9.0);
-  vec3 armColor = mix(uGalaxyColor, uNebulaB + 0.3, 0.5);
-  return (armColor * disk * pow(spiral, 2.0) * 0.55 + uGalaxyColor * core * 1.2) * (0.5 + h.y);
+  vec2 q = (fract(g) - 0.5 - (hash2(id + 7.0) - 0.5) * 0.5) / 2.2;
+  float type = floor(hash(id + 5.0) * 4.0);
+  return galaxy(q, (0.03 + h.y * 0.035) * uGalaxySize, 0.25 + h.y * 0.6, hash(id) * 6.28, h.x > 0.3 ? 0.2 : -0.2,
+    2.0 + floor(hash(id + 3.0) * 2.0), 2.2, type, uGalaxyColor, 0.5 + h.y);
+}
+
+// Свои галактики: каждая со своими настройками и местом (x, y — доли кадра).
+vec3 myGalaxies(vec2 p) {
+  vec3 col = vec3(0.0);
+  int n = int(uMyGalaxiesCount);
+  for (int i = 0; i < 8; i++) {
+    if (i >= n) break;
+    vec2 c = (vec2(uMyGalaxiesX[i], uMyGalaxiesY[i]) - 0.5) * vec2(aspect(), 1.0);
+    col += galaxy(p - c, uMyGalaxiesSize[i] * 0.08, uMyGalaxiesTilt[i], radians(uMyGalaxiesAngle[i]), uMyGalaxiesSpin[i],
+      uMyGalaxiesArms[i], uMyGalaxiesTwist[i], uMyGalaxiesType[i], uMyGalaxiesColor[i], uMyGalaxiesBright[i]);
+  }
+  return col;
 }
 
 // ─── Метеоры ────────────────────────────────────────────────────────────
@@ -323,7 +397,7 @@ void main() {
   float fa = radians(uFlightAngle);
   vec2 fly = vec2(cos(fa), sin(fa)) * t;
 
-  vec3 col = uBackground + nebula(p, m) + galaxies(p + fly * 0.2 - m * 0.05);
+  vec3 col = uBackground + nebula(p, m) + galaxyField(p + fly * 0.2 - m * 0.05) + myGalaxies(p - m * 0.08);
 
   // Три слоя звёзд: дальние мелкие и медленные, ближние крупнее и быстрее.
   float s = 0.0;

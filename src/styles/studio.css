@@ -68,6 +68,18 @@
   fill: #fff;
 }
 
+.list__tabs {
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+
+.list__item {
+  padding: 12px 10px 10px;
+  border: 1px solid var(--line);
+  border-top: 0;
+  border-radius: 0 0 10px 10px;
+}
+
 .control--toggle {
   margin: 0;
   gap: 8px;

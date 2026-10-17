@@ -19,13 +19,25 @@ export type PointsParam = {
   /** Какие параметры переключить, когда начинают рисовать (например, созвездия → «своё»). */
   enable?: Record<string, string>
 }
+/** Список объектов со своими полями (свои галактики…). Значение — JSON-массив. */
+export type ListParam = {
+  type: 'list'
+  label: string
+  /** Поля одного объекта; x и y (0…1) — место в кадре, его ставят кликом. */
+  fields: Params
+  /** Как назвать объект: «Галактика». */
+  itemLabel: string
+  default: string
+  max?: number
+  hint?: string
+}
 export type TextParam = { type: 'text'; label: string; default: string; maxLength?: number; hint?: string }
 /**
  * Когда параметр действует: { cycle: ['custom'] } — только если cycle = custom.
  * В остальных режимах Студия показывает его бледным с пояснением.
  */
 export type ParamWhen = Record<string, (string | boolean)[]>
-export type Param = (NumberParam | ColorParam | BooleanParam | SelectParam | TextParam | PointsParam) & { when?: ParamWhen }
+export type Param = (NumberParam | ColorParam | BooleanParam | SelectParam | TextParam | PointsParam | ListParam) & { when?: ParamWhen }
 export type Params = Record<string, Param>
 export type Values = Record<string, number | string | boolean>
 
@@ -106,6 +118,7 @@ export const COMMON: string
 export function uniformName(key: string): string
 export function hexToRgb(hex: string): [number, number, number]
 export function uniformValue(param: Param, value: unknown): number | number[]
+export function parseList(value: unknown, param: ListParam): Values[]
 export function parsePoints(value: unknown, max?: number): [number, number, number][]
 export function buildSimulation(spec: Pick<EffectSpec, 'params' | 'simulation'>): string
 export function buildFragment(spec: Pick<EffectSpec, 'fragment' | 'params' | 'image'>): string
