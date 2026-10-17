@@ -620,11 +620,12 @@
 }
 
 .liquid-demo {
-  padding: 22px 46px;
+  max-width: calc(100% - 80px);
+  padding: clamp(14px, 3vw, 22px) clamp(24px, 6vw, 46px);
   border: 0;
   border-radius: 999px;
   cursor: pointer;
-  font-size: 20px;
+  font-size: clamp(16px, 2.5vw, 20px);
   font-weight: 700;
 }
 

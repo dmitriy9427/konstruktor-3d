@@ -68,12 +68,17 @@ export function createLiquidButton(button, values = {}) {
   makeBlobs()
 
   const m = { x: 0, y: 0, over: false, power: 0 }
+  // Мышь слушаем на всём окне: капли тянутся за курсором и за краем кнопки —
+  // пока он ближе «Дотягиваются до» (в высотах кнопки).
   const onMove = (e) => {
     const r = button.getBoundingClientRect()
     m.x = e.clientX - r.left
     m.y = e.clientY - r.top
-    m.over = true
-    wake()
+    const dx = Math.max(0, -m.x, m.x - r.width)
+    const dy = Math.max(0, -m.y, m.y - r.height)
+    const over = Math.hypot(dx, dy) < r.height * v.reach * 0.6
+    if (over || m.over) wake()
+    m.over = over
   }
   const onLeave = () => {
     m.over = false
@@ -87,8 +92,8 @@ export function createLiquidButton(button, values = {}) {
     }
     wake()
   }
-  button.addEventListener('pointermove', onMove)
-  button.addEventListener('pointerleave', onLeave)
+  addEventListener('pointermove', onMove, { passive: true })
+  document.addEventListener('pointerleave', onLeave)
   button.addEventListener('pointerdown', onDown)
 
   let raf = 0
@@ -104,7 +109,10 @@ export function createLiquidButton(button, values = {}) {
     const h = button.offsetHeight
     const room = v.room
     m.power += ((m.over ? 1 : 0) - m.power) * (1 - Math.exp(-dt * 8))
-    body.style.transform = `scale(${1 + m.power * 0.04})`
+    // Сама кнопка чуть тянется за мышью («Тело следует»).
+    const bx = (m.x - w / 2) * v.bodyFollow * 0.12 * m.power
+    const by = (m.y - h / 2) * v.bodyFollow * 0.12 * m.power
+    body.style.transform = `translate(${bx}px, ${by}px) scale(${1 + m.power * 0.04})`
     let moving = m.power > 0.001 && m.power < 0.999
     for (const b of blobs) {
       // Своё место — на краю «пилюли»; в покое капля чуть дышит.
@@ -113,23 +121,33 @@ export function createLiquidButton(button, values = {}) {
       const wob = reduced ? 0 : Math.sin(t * 2.2 + b.phase) * v.wobble * 6
       let tx = cx + Math.cos(b.a) * wob
       let ty = cy + Math.sin(b.a) * wob
-      // Ближние к курсору капли тянутся к нему.
+      // Капли тянутся к курсору: ближние — сильнее (радиус — «Дотягиваются до»),
+      // но не дальше «Отрыва» от своего места — дальше капля «рвётся» обратно.
       if (m.power > 0.01) {
         const dx = m.x - cx
         const dy = m.y - cy
-        const near = Math.exp(-(dx * dx + dy * dy) / (h * h * 1.2))
-        tx += dx * near * v.stretch * m.power
-        ty += dy * near * v.stretch * m.power
+        const reach = h * v.reach
+        const near = Math.exp(-(dx * dx + dy * dy) / (reach * reach))
+        let ox = dx * near * v.stretch * m.power
+        let oy = dy * near * v.stretch * m.power
+        const len = Math.hypot(ox, oy)
+        const maxLen = h * v.detach
+        if (len > maxLen) {
+          ox *= maxLen / len
+          oy *= maxLen / len
+        }
+        tx += ox
+        ty += oy
       }
-      // Пружина к цели (брызги гаснут сами).
-      b.vx += (tx - b.x) * 120 * dt
-      b.vy += (ty - b.y) * 120 * dt
-      const damp = Math.exp(-dt * 9)
+      // Пружина к цели: «Упругость» — жёсткость, «Вязкость» — как быстро гаснут колебания.
+      b.vx += (tx - b.x) * v.elasticity * 200 * dt
+      b.vy += (ty - b.y) * v.elasticity * 200 * dt
+      const damp = Math.exp(-dt * v.viscosity * 14)
       b.vx *= damp
       b.vy *= damp
       b.x += b.vx * dt
       b.y += b.vy * dt
-      const s = h * 0.55 * b.size
+      const s = h * 0.55 * b.size * v.blobSize
       b.el.style.width = `${s}px`
       b.el.style.height = `${s}px`
       b.el.style.transform = `translate(${b.x + room - s / 2}px, ${b.y + room - s / 2}px)`
@@ -171,8 +189,8 @@ export function createLiquidButton(button, values = {}) {
     },
     destroy() {
       if (raf) cancelAnimationFrame(raf)
-      button.removeEventListener('pointermove', onMove)
-      button.removeEventListener('pointerleave', onLeave)
+      removeEventListener('pointermove', onMove)
+      document.removeEventListener('pointerleave', onLeave)
       button.removeEventListener('pointerdown', onDown)
       layer.remove()
       svg.remove()
@@ -186,10 +204,16 @@ export const LIQUID_DEFAULTS = {
   color: '#a78bfa',
   textColor: '#0b0b12',
   blobs: 8,
-  goo: 8,
+  goo: 10,
   room: 30,
   wobble: 0.6,
-  stretch: 0.7,
+  stretch: 1.4,
+  reach: 1.6,
+  detach: 1.1,
+  elasticity: 0.6,
+  viscosity: 0.55,
+  bodyFollow: 0.6,
+  blobSize: 1,
   splash: 1,
 }
 
@@ -210,7 +234,24 @@ export function createPreloader(root, values = {}) {
   const layer = document.createElement('div')
   layer.setAttribute('role', 'progressbar')
   layer.setAttribute('aria-label', 'Загрузка')
-  Object.assign(layer.style, { position: page ? 'fixed' : 'absolute', inset: '0', zIndex: '2147483600', background: v.background })
+  Object.assign(layer.style, { position: page ? 'fixed' : 'absolute', inset: '0', zIndex: '2147483600', overflow: 'hidden' })
+  // Фон — отдельный слой: при открытии он уходит своим ходом (плавно), а холст — своим.
+  const bg = document.createElement('div')
+  Object.assign(bg.style, { position: 'absolute', inset: '0', background: v.background })
+  layer.append(bg)
+  const halves = [0, 1].map(() => {
+    const el = document.createElement('div')
+    // 50.5 % — створки чуть заходят друг на друга: без щели посередине при округлении.
+    Object.assign(el.style, { position: 'absolute', top: '0', bottom: '0', width: '50.5%', background: v.background, display: 'none' })
+    layer.append(el)
+    return el
+  })
+  halves[0].style.left = '0'
+  halves[1].style.right = '0'
+  // Прожигание: маска на маленьком холсте (дёшево), растягивается на весь слой.
+  const burn = document.createElement('canvas')
+  Object.assign(burn.style, { position: 'absolute', inset: '0', width: '100%', height: '100%', display: 'none', imageRendering: 'auto' })
+  layer.append(burn)
   const canvas = document.createElement('canvas')
   Object.assign(canvas.style, { position: 'absolute', inset: '0', width: '100%', height: '100%' })
   layer.append(canvas)
@@ -228,6 +269,8 @@ export function createPreloader(root, values = {}) {
     const dpr = Math.min(devicePixelRatio || 1, 2)
     state.w = layer.clientWidth
     state.h = layer.clientHeight
+    // Слой скрыт или ещё не разложен — читать нечего (getImageData с шириной 0 падает).
+    if (!state.w || !state.h) return
     canvas.width = Math.round(state.w * dpr)
     canvas.height = Math.round(state.h * dpr)
     mask.width = canvas.width
@@ -295,6 +338,25 @@ export function createPreloader(root, values = {}) {
     ctx.clearRect(0, 0, canvas.width, canvas.height)
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     const p = state.shown
+    if (v.style === 'counter') {
+      // Большие цифры и тонкая линия прогресса.
+      ctx.fillStyle = v.color
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.font = `${v.weight} ${Math.min(state.w * 0.3, state.h * 0.35) * v.size}px system-ui, sans-serif`
+      ctx.globalAlpha = 1 - out
+      ctx.fillText(`${Math.round(p * 100)}`, state.w / 2, state.h / 2)
+      ctx.font = `500 ${14 * Math.max(1, v.size)}px system-ui, sans-serif`
+      ctx.globalAlpha = 0.6 * (1 - out)
+      ctx.fillText(String(v.text), state.w / 2, state.h / 2 + Math.min(state.w * 0.3, state.h * 0.35) * v.size * 0.55)
+      ctx.globalAlpha = 1 - out
+      const lw = state.w * 0.4
+      ctx.fillRect(state.w / 2 - lw / 2, state.h * 0.82, lw * p, 2)
+      ctx.globalAlpha = 0.2 * (1 - out)
+      ctx.fillRect(state.w / 2 - lw / 2, state.h * 0.82, lw, 2)
+      ctx.globalAlpha = 1
+      return
+    }
     if (v.style === 'fill') {
       // 1) пустые буквы — бледным; 2) жидкость: прямоугольник под волной, вырезанный по буквам.
       ctx.globalAlpha = 0.18
@@ -333,7 +395,7 @@ export function createPreloader(root, values = {}) {
       stats.drawCalls = state.dots.length
     }
     // Проценты.
-    if (v.percent) {
+    if (v.percent && v.style !== 'counter') {
       ctx.fillStyle = v.color
       ctx.globalAlpha = 0.7 * (1 - out)
       ctx.font = `500 14px system-ui, sans-serif`
@@ -343,13 +405,69 @@ export function createPreloader(root, values = {}) {
     }
   }
 
+  // Поле прожигания: для каждой клетки — когда она прогорит (шум + расстояние до очагов).
+  let burnField = null
+  const buildBurn = () => {
+    const W = 160
+    const H = Math.max(40, Math.round((W * state.h) / Math.max(1, state.w)))
+    const centers = Array.from({ length: 4 }, () => [Math.random(), Math.random()])
+    const f = new Float32Array(W * H)
+    for (let y = 0; y < H; y++)
+      for (let x = 0; x < W; x++) {
+        const u = x / W
+        const w = y / H
+        let d = 9
+        for (const [cx, cy] of centers) d = Math.min(d, Math.hypot((u - cx) * (W / H), w - cy))
+        const n = Math.sin(u * 23.1 + w * 7.3) * 0.5 + Math.sin(u * 9.7 - w * 17.9) * 0.5
+        f[y * W + x] = d + n * 0.06 + Math.random() * 0.03
+      }
+    let max = 0
+    for (const x of f) max = Math.max(max, x)
+    for (let i = 0; i < f.length; i++) f[i] /= max
+    burn.width = W
+    burn.height = H
+    burnField = { W, H, f, img: burn.getContext('2d').createImageData(W, H) }
+  }
+  const bgRgb = () => {
+    const n = parseInt(String(v.background).replace('#', ''), 16)
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255]
+  }
+
   function reveal(out) {
     const e = out * out * (3 - 2 * out)
-    if (v.reveal === 'fade') layer.style.opacity = String(1 - e)
-    else if (v.reveal === 'up') layer.style.transform = `translateY(${-e * 100}%)`
-    else layer.style.clipPath = `circle(${(1 - e) * 150}% at 50% 50%)`
-    // В «scatter» фон уходит чуть позже — точки успевают разлететься над страницей.
-    if (v.style === 'scatter' && v.reveal !== 'fade') layer.style.background = e > 0 ? 'transparent' : v.background
+    // Холст с текстом/точками: в «scatter» не гасим — точки разлетаются над страницей сами.
+    canvas.style.opacity = v.style === 'scatter' ? '1' : String(1 - Math.min(1, out * 1.6))
+    bg.style.display = v.reveal === 'split' || v.reveal === 'burn' ? 'none' : ''
+    halves.forEach((h) => (h.style.display = v.reveal === 'split' ? '' : 'none'))
+    burn.style.display = v.reveal === 'burn' ? '' : 'none'
+    if (v.reveal === 'fade') bg.style.opacity = String(1 - e)
+    else if (v.reveal === 'up') bg.style.transform = `translateY(${-e * 100}%)`
+    else if (v.reveal === 'circle') bg.style.clipPath = `circle(${(1 - e) * 150}% at 50% 50%)`
+    else if (v.reveal === 'split') {
+      halves[0].style.transform = `translateX(${-e * 100}%)`
+      halves[1].style.transform = `translateX(${e * 100}%)`
+    } else if (v.reveal === 'burn') {
+      if (!burnField) buildBurn()
+      const { f, img } = burnField
+      const [r, g, b] = bgRgb()
+      const t = out * 1.15 - 0.05
+      const edge = 0.05
+      for (let i = 0; i < f.length; i++) {
+        const d = f[i] - t
+        const k = i * 4
+        if (d < 0) {
+          img.data[k + 3] = 0
+          continue
+        }
+        // Край: жёлтый → оранжевый → фон.
+        const heat = Math.max(0, 1 - d / edge)
+        img.data[k] = r + (255 - r) * heat
+        img.data[k + 1] = g + (180 * heat * heat + 60 * heat - g * heat)
+        img.data[k + 2] = b * (1 - heat) + 40 * heat * heat
+        img.data[k + 3] = 255
+      }
+      burn.getContext('2d').putImageData(img, 0, 0)
+    }
   }
 
   const wake = () => {
@@ -376,13 +494,18 @@ export function createPreloader(root, values = {}) {
     /** Показать заново (для Студии). */
     replay() {
       Object.assign(state, { target: 0, shown: 0, start: performance.now(), doneAt: 0 })
-      Object.assign(layer.style, { display: '', opacity: '', transform: '', clipPath: '', background: v.background })
+      layer.style.display = ''
+      Object.assign(bg.style, { opacity: '', transform: '', clipPath: '', background: v.background })
+      halves.forEach((h) => Object.assign(h.style, { transform: '', background: v.background }))
+      burnField = null
       last = 0
       wake()
     },
     set(next) {
       Object.assign(v, next)
-      layer.style.background = v.background
+      bg.style.background = v.background
+      halves.forEach((h) => (h.style.background = v.background))
+      burnField = null
       layout()
       wake()
     },
