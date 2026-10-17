@@ -36,7 +36,7 @@ export type TextParam = { type: 'text'; label: string; default: string; maxLengt
  * Когда параметр действует: { cycle: ['custom'] } — только если cycle = custom.
  * В остальных режимах Студия показывает его бледным с пояснением.
  */
-export type ParamWhen = Record<string, (string | boolean)[]>
+export type ParamWhen = Record<string, (string | boolean | number)[]>
 export type Param = (NumberParam | ColorParam | BooleanParam | SelectParam | TextParam | PointsParam | ListParam) & { when?: ParamWhen }
 export type Params = Record<string, Param>
 export type Values = Record<string, number | string | boolean>
@@ -56,6 +56,8 @@ export type EffectSpec = {
    * Результат доступен основному шейдеру как uSim.
    */
   simulation?: { fragment: string; size?: number }
+  /** Слайды: прогресс по наведению (картинка 1 → 2, пока курсор над ней). */
+  hoverSwap?: boolean
   /** С какого времени начинать анимацию (секунды) — первый кадр сразу «красивый». */
   startTime?: number
 }

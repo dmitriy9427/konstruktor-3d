@@ -1,0 +1,413 @@
+/**
+ * Элементы интерфейса без WebGL: жидкая кнопка и прелоадер.
+ *
+ * Как и runtime.js, файл самодостаточен: Студия вставляет его текст в экспорт.
+ *
+ * Жидкая кнопка — «липкий» SVG-фильтр (goo): несколько кругов-капель вокруг
+ * кнопки размываются (feGaussianBlur), а потом прозрачность «обрезается»
+ * порогом (feColorMatrix: альфа × 20 − 8). Размытые соседние круги сливаются
+ * в одну каплю с плавными перемычками — как ртуть. Капли тянутся к курсору,
+ * дрожат в покое, по клику разлетаются брызгами и стекаются обратно.
+ * Текст лежит поверх и в фильтр не попадает — остаётся чётким.
+ *
+ * Прелоадер — 2D-холст поверх страницы (или блока):
+ *   fill    — название заполняется жидкостью снизу вверх, волна на поверхности;
+ *   scatter — название из точек, в конце точки разлетаются;
+ * потом слой уходит: растворяется, уезжает вверх или открывается кругом.
+ * Прогресс: сам за duration секунд, до события load страницы или из кода:
+ *   preloader.progress(0.4) … preloader.done()
+ */
+
+let uid = 0
+
+// ─── Жидкая кнопка ──────────────────────────────────────────────────────────
+
+/**
+ * @param {HTMLElement} button — кнопка или ссылка
+ * @param {Record<string, unknown>} values — см. LIQUID_DEFAULTS
+ */
+export function createLiquidButton(button, values = {}) {
+  const v = { ...LIQUID_DEFAULTS, ...values }
+  const id = `k3d-goo-${++uid}`
+  const reduced = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
+  const stats = { name: v.name ?? 'жидкая кнопка', fps: 0, cpuMs: 0, gpuMs: null, dpr: 1, drawCalls: 0, width: 0, height: 0 }
+
+  // Фильтр «слипания».
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+  svg.setAttribute('aria-hidden', 'true')
+  Object.assign(svg.style, { position: 'absolute', width: '0', height: '0' })
+  svg.innerHTML = `<filter id="${id}"><feGaussianBlur in="SourceGraphic" stdDeviation="${v.goo}" result="b"/><feColorMatrix in="b" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 22 -9"/></filter>`
+  document.body.append(svg)
+  const blurNode = svg.querySelector('feGaussianBlur')
+
+  const prev = { position: button.style.position, background: button.style.background, isolation: button.style.isolation, color: button.style.color }
+  if (getComputedStyle(button).position === 'static') button.style.position = 'relative'
+  button.style.isolation = 'isolate'
+  button.style.background = 'transparent'
+  button.style.color = v.textColor
+
+  const layer = document.createElement('span')
+  layer.setAttribute('aria-hidden', 'true')
+  Object.assign(layer.style, { position: 'absolute', inset: `-${v.room}px`, zIndex: '-1', filter: `url(#${id})`, pointerEvents: 'none' })
+  button.prepend(layer)
+
+  const body = document.createElement('span')
+  Object.assign(body.style, { position: 'absolute', inset: `${v.room}px`, borderRadius: '999px', background: v.color, transition: 'transform .3s' })
+  layer.append(body)
+
+  const blobs = []
+  const makeBlobs = () => {
+    blobs.splice(0).forEach((b) => b.el.remove())
+    for (let i = 0; i < v.blobs; i++) {
+      const el = document.createElement('span')
+      Object.assign(el.style, { position: 'absolute', left: '0', top: '0', borderRadius: '50%', background: v.color, willChange: 'transform' })
+      layer.append(el)
+      blobs.push({ el, a: (i / v.blobs) * Math.PI * 2, x: 0, y: 0, vx: 0, vy: 0, phase: Math.random() * 6.28, size: 0.6 + Math.random() * 0.5 })
+    }
+  }
+  makeBlobs()
+
+  const m = { x: 0, y: 0, over: false, power: 0 }
+  const onMove = (e) => {
+    const r = button.getBoundingClientRect()
+    m.x = e.clientX - r.left
+    m.y = e.clientY - r.top
+    m.over = true
+    wake()
+  }
+  const onLeave = () => {
+    m.over = false
+    wake()
+  }
+  const onDown = () => {
+    // Брызги: капли получают толчок наружу.
+    for (const b of blobs) {
+      b.vx += Math.cos(b.a) * 900 * v.splash
+      b.vy += Math.sin(b.a) * 900 * v.splash
+    }
+    wake()
+  }
+  button.addEventListener('pointermove', onMove)
+  button.addEventListener('pointerleave', onLeave)
+  button.addEventListener('pointerdown', onDown)
+
+  let raf = 0
+  let last = 0
+  let t = 0
+  function tick(now) {
+    raf = 0
+    const dt = last ? Math.min((now - last) / 1000, 0.05) : 1 / 60
+    last = now
+    t += dt
+    const cpu = performance.now()
+    const w = button.offsetWidth
+    const h = button.offsetHeight
+    const room = v.room
+    m.power += ((m.over ? 1 : 0) - m.power) * (1 - Math.exp(-dt * 8))
+    body.style.transform = `scale(${1 + m.power * 0.04})`
+    let moving = m.power > 0.001 && m.power < 0.999
+    for (const b of blobs) {
+      // Своё место — на краю «пилюли»; в покое капля чуть дышит.
+      const cx = w / 2 + Math.cos(b.a) * (w / 2 - h * 0.35)
+      const cy = h / 2 + Math.sin(b.a) * h * 0.32
+      const wob = reduced ? 0 : Math.sin(t * 2.2 + b.phase) * v.wobble * 6
+      let tx = cx + Math.cos(b.a) * wob
+      let ty = cy + Math.sin(b.a) * wob
+      // Ближние к курсору капли тянутся к нему.
+      if (m.power > 0.01) {
+        const dx = m.x - cx
+        const dy = m.y - cy
+        const near = Math.exp(-(dx * dx + dy * dy) / (h * h * 1.2))
+        tx += dx * near * v.stretch * m.power
+        ty += dy * near * v.stretch * m.power
+      }
+      // Пружина к цели (брызги гаснут сами).
+      b.vx += (tx - b.x) * 120 * dt
+      b.vy += (ty - b.y) * 120 * dt
+      const damp = Math.exp(-dt * 9)
+      b.vx *= damp
+      b.vy *= damp
+      b.x += b.vx * dt
+      b.y += b.vy * dt
+      const s = h * 0.55 * b.size
+      b.el.style.width = `${s}px`
+      b.el.style.height = `${s}px`
+      b.el.style.transform = `translate(${b.x + room - s / 2}px, ${b.y + room - s / 2}px)`
+      if (Math.abs(b.vx) + Math.abs(b.vy) > 1) moving = true
+    }
+    stats.cpuMs = performance.now() - cpu
+    stats.fps = Math.round(1 / dt)
+    if (moving || m.over || (v.wobble > 0 && !reduced)) wake()
+    else last = 0
+  }
+  function wake() {
+    if (!raf) raf = requestAnimationFrame(tick)
+  }
+  // Первая расстановка капель — без «влёта» из угла.
+  requestAnimationFrame(() => {
+    for (const b of blobs) {
+      b.x = button.offsetWidth / 2 + Math.cos(b.a) * (button.offsetWidth / 2 - button.offsetHeight * 0.35)
+      b.y = button.offsetHeight / 2 + Math.sin(b.a) * button.offsetHeight * 0.32
+    }
+    wake()
+  })
+
+  const registry = (globalThis.__K3D_EFFECTS__ ??= new Set())
+  registry.add(stats)
+
+  return {
+    stats,
+    set(next) {
+      const rebuild = next.blobs !== undefined && next.blobs !== v.blobs
+      Object.assign(v, next)
+      blurNode.setAttribute('stdDeviation', String(v.goo))
+      body.style.background = v.color
+      button.style.color = v.textColor
+      layer.style.inset = `-${v.room}px`
+      body.style.inset = `${v.room}px`
+      if (rebuild) makeBlobs()
+      else blobs.forEach((b) => (b.el.style.background = v.color))
+      wake()
+    },
+    destroy() {
+      if (raf) cancelAnimationFrame(raf)
+      button.removeEventListener('pointermove', onMove)
+      button.removeEventListener('pointerleave', onLeave)
+      button.removeEventListener('pointerdown', onDown)
+      layer.remove()
+      svg.remove()
+      Object.assign(button.style, prev)
+      registry.delete(stats)
+    },
+  }
+}
+
+export const LIQUID_DEFAULTS = {
+  color: '#a78bfa',
+  textColor: '#0b0b12',
+  blobs: 8,
+  goo: 8,
+  room: 30,
+  wobble: 0.6,
+  stretch: 0.7,
+  splash: 1,
+}
+
+// ─── Прелоадер ──────────────────────────────────────────────────────────────
+
+/**
+ * @param {HTMLElement} root — document.body (вся страница) или блок
+ * @param {Record<string, unknown>} values — см. PRELOADER_DEFAULTS
+ * @returns {{ progress(p: number): void, done(): void, replay(): void, destroy(): void, finished: Promise<void> }}
+ */
+export function createPreloader(root, values = {}) {
+  const v = { ...PRELOADER_DEFAULTS, ...values }
+  const page = root === document.body
+  const reduced = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
+  const stats = { name: v.name ?? 'прелоадер', fps: 0, cpuMs: 0, gpuMs: null, dpr: 1, drawCalls: 0, width: 0, height: 0 }
+
+  if (!page && getComputedStyle(root).position === 'static') root.style.position = 'relative'
+  const layer = document.createElement('div')
+  layer.setAttribute('role', 'progressbar')
+  layer.setAttribute('aria-label', 'Загрузка')
+  Object.assign(layer.style, { position: page ? 'fixed' : 'absolute', inset: '0', zIndex: '2147483600', background: v.background })
+  const canvas = document.createElement('canvas')
+  Object.assign(canvas.style, { position: 'absolute', inset: '0', width: '100%', height: '100%' })
+  layer.append(canvas)
+  root.append(layer)
+  const ctx = canvas.getContext('2d')
+  const mask = document.createElement('canvas')
+  const mctx = mask.getContext('2d', { willReadFrequently: true })
+
+  let resolveFinished
+  const finished = new Promise((r) => (resolveFinished = r))
+  const state = { target: 0, shown: 0, start: performance.now(), doneAt: 0, w: 0, h: 0, dots: [] }
+
+  const font = () => `${v.weight} ${Math.min(state.w / Math.max(3, String(v.text).length) * 1.5, state.h * 0.28) * v.size}px system-ui, sans-serif`
+  const layout = () => {
+    const dpr = Math.min(devicePixelRatio || 1, 2)
+    state.w = layer.clientWidth
+    state.h = layer.clientHeight
+    canvas.width = Math.round(state.w * dpr)
+    canvas.height = Math.round(state.h * dpr)
+    mask.width = canvas.width
+    mask.height = canvas.height
+    mctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+    mctx.clearRect(0, 0, state.w, state.h)
+    mctx.font = font()
+    mctx.textAlign = 'center'
+    mctx.textBaseline = 'middle'
+    mctx.fillStyle = '#fff'
+    mctx.fillText(String(v.text), state.w / 2, state.h / 2)
+    // Точки букв (для «scatter»): сетка с шагом gap, берём закрашенные.
+    const data = mctx.getImageData(0, 0, mask.width, mask.height).data
+    const gap = Math.max(2, Math.round(4 * dpr))
+    state.dots = []
+    for (let y = 0; y < mask.height; y += gap)
+      for (let x = 0; x < mask.width; x += gap)
+        if (data[(y * mask.width + x) * 4 + 3] > 128) {
+          const a = Math.random() * Math.PI * 2
+          state.dots.push({ x: x / dpr, y: y / dpr, a, sp: 200 + Math.random() * 600, delay: Math.random() })
+        }
+    stats.width = canvas.width
+    stats.height = canvas.height
+  }
+  layout()
+  const ro = new ResizeObserver(layout)
+  ro.observe(layer)
+
+  // Прогресс «сам»: за duration секунд; «до загрузки»: тянется к 90 %, на load — 100 %.
+  const onLoad = () => (state.target = 1)
+  if (v.mode === 'load') {
+    if (document.readyState === 'complete') state.target = 1
+    else addEventListener('load', onLoad, { once: true })
+  }
+
+  let raf = 0
+  let last = 0
+  function tick(now) {
+    raf = 0
+    const dt = last ? Math.min((now - last) / 1000, 0.05) : 1 / 60
+    last = now
+    const cpu = performance.now()
+    const age = (now - state.start) / 1000
+    if (v.mode === 'auto') state.target = Math.min(1, age / Math.max(0.2, v.duration))
+    if (v.mode === 'load' && state.target < 1) state.target = Math.min(0.9, age / 3)
+    state.shown += (state.target - state.shown) * (1 - Math.exp(-dt * 5))
+    if (state.target >= 1 && state.shown > 0.995 && !state.doneAt) state.doneAt = now
+
+    const out = state.doneAt ? Math.min(1, (now - state.doneAt) / 1000 / Math.max(0.1, v.revealTime)) : 0
+    draw(age, out)
+    reveal(out)
+
+    stats.cpuMs = performance.now() - cpu
+    stats.fps = Math.round(1 / dt)
+    if (out < 1) raf = requestAnimationFrame(tick)
+    else {
+      layer.style.display = 'none'
+      resolveFinished()
+    }
+  }
+
+  function draw(age, out) {
+    const dpr = canvas.width / Math.max(1, state.w)
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+    const p = state.shown
+    if (v.style === 'fill') {
+      // 1) пустые буквы — бледным; 2) жидкость: прямоугольник под волной, вырезанный по буквам.
+      ctx.globalAlpha = 0.18
+      ctx.drawImage(mask, 0, 0, state.w, state.h)
+      ctx.globalAlpha = 1
+      const top = state.h / 2 - state.h * 0.16 * v.size
+      const bottom = state.h / 2 + state.h * 0.16 * v.size
+      const level = bottom - (bottom - top) * p
+      ctx.save()
+      ctx.beginPath()
+      ctx.moveTo(0, state.h)
+      for (let x = 0; x <= state.w; x += 6) {
+        const wave = Math.sin(x * 0.03 + age * 4 * v.waveSpeed) * 6 * v.wave + Math.sin(x * 0.017 - age * 2.6 * v.waveSpeed) * 4 * v.wave
+        ctx.lineTo(x, level + wave * (1 - p * 0.6))
+      }
+      ctx.lineTo(state.w, state.h)
+      ctx.closePath()
+      ctx.fillStyle = v.color
+      ctx.fill()
+      ctx.globalCompositeOperation = 'destination-in'
+      ctx.drawImage(mask, 0, 0, state.w, state.h)
+      ctx.restore()
+      ctx.globalCompositeOperation = 'source-over'
+    } else {
+      // Точки букв: появляются по прогрессу (в случайном порядке), в конце разлетаются.
+      ctx.fillStyle = v.color
+      for (const d of state.dots) {
+        if (d.delay > p) continue
+        const fly = reduced ? 0 : Math.max(0, out * 1.6 - d.delay * 0.6)
+        const x = d.x + Math.cos(d.a) * d.sp * fly * fly
+        const y = d.y + Math.sin(d.a) * d.sp * fly * fly
+        ctx.globalAlpha = 1 - Math.min(1, fly)
+        ctx.fillRect(x - 1.2, y - 1.2, 2.4, 2.4)
+      }
+      ctx.globalAlpha = 1
+      stats.drawCalls = state.dots.length
+    }
+    // Проценты.
+    if (v.percent) {
+      ctx.fillStyle = v.color
+      ctx.globalAlpha = 0.7 * (1 - out)
+      ctx.font = `500 14px system-ui, sans-serif`
+      ctx.textAlign = 'center'
+      ctx.fillText(`${Math.round(p * 100)}%`, state.w / 2, state.h / 2 + state.h * 0.2 * v.size + 24)
+      ctx.globalAlpha = 1
+    }
+  }
+
+  function reveal(out) {
+    const e = out * out * (3 - 2 * out)
+    if (v.reveal === 'fade') layer.style.opacity = String(1 - e)
+    else if (v.reveal === 'up') layer.style.transform = `translateY(${-e * 100}%)`
+    else layer.style.clipPath = `circle(${(1 - e) * 150}% at 50% 50%)`
+    // В «scatter» фон уходит чуть позже — точки успевают разлететься над страницей.
+    if (v.style === 'scatter' && v.reveal !== 'fade') layer.style.background = e > 0 ? 'transparent' : v.background
+  }
+
+  const wake = () => {
+    if (!raf) raf = requestAnimationFrame(tick)
+  }
+  wake()
+
+  const registry = (globalThis.__K3D_EFFECTS__ ??= new Set())
+  registry.add(stats)
+
+  return {
+    stats,
+    finished,
+    /** Прогресс 0…1 (для mode: 'manual'). */
+    progress(p) {
+      state.target = Math.min(1, Math.max(0, p))
+      wake()
+    },
+    /** Всё загружено — показать сайт. */
+    done() {
+      state.target = 1
+      wake()
+    },
+    /** Показать заново (для Студии). */
+    replay() {
+      Object.assign(state, { target: 0, shown: 0, start: performance.now(), doneAt: 0 })
+      Object.assign(layer.style, { display: '', opacity: '', transform: '', clipPath: '', background: v.background })
+      last = 0
+      wake()
+    },
+    set(next) {
+      Object.assign(v, next)
+      layer.style.background = v.background
+      layout()
+      wake()
+    },
+    destroy() {
+      if (raf) cancelAnimationFrame(raf)
+      ro.disconnect()
+      removeEventListener('load', onLoad)
+      layer.remove()
+      registry.delete(stats)
+    },
+  }
+}
+
+export const PRELOADER_DEFAULTS = {
+  text: 'Studio',
+  style: 'fill',
+  mode: 'auto',
+  duration: 2.5,
+  reveal: 'circle',
+  revealTime: 0.9,
+  size: 1,
+  weight: 800,
+  wave: 1,
+  waveSpeed: 1,
+  percent: true,
+  color: '#a78bfa',
+  background: '#07060f',
+}

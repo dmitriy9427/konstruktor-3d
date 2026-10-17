@@ -19,12 +19,14 @@ export type EffectKind =
   | 'slides'
   /** 3D-сцена на three.js: частицы, стекло. */
   | 'three'
+  /** Элемент интерфейса без WebGL: жидкая кнопка, прелоадер (src/runtime/ui.js). */
+  | 'ui'
   /** Курсор без WebGL: след из частиц, кольцо, фонарик (src/runtime/cursor.js). */
   | 'cursor'
   /** Переход между секциями: SVG-фильтр поверх настоящей секции. */
   | 'transition'
 
-export type Category = 'Свой эффект' | 'Фоны' | 'Изображения' | 'Переходы' | '3D' | 'Курсоры' | 'Без WebGL'
+export type Category = 'Свой эффект' | 'Фоны' | 'Изображения' | 'Переходы' | '3D' | 'Курсоры' | 'Интерфейс' | 'Без WebGL'
 
 export type EffectDef = {
   id: string
@@ -35,6 +37,8 @@ export type EffectDef = {
   description: string
   /** Тело фрагментного шейдера (для quad и image). */
   fragment?: string
+  /** Слайды: вторая картинка проявляется при наведении (а не по кнопкам). */
+  hoverSwap?: boolean
   /** Шейдер поверх страницы: прозрачный холст на весь экран, клики проходят сквозь (курсоры). */
   overlay?: boolean
   /** Симуляция: шейдер шага (состояние в текстуре, см. runtime.js), её результат — uSim. */
@@ -46,6 +50,8 @@ export type EffectDef = {
   setup?: SceneSetup
   setupName?: string
   addons?: ('RoomEnvironment')[]
+  /** Свои общие настройки по умолчанию (лёгкому фону — низкое качество и 30 кадров). */
+  defaultCommon?: Partial<import('../engine/params').Common>
   /** Использует ли эффект мышь (иначе переключатель «за мышью» скрыт). */
   usesMouse?: boolean
 }

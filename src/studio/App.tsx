@@ -103,6 +103,7 @@ export function App() {
     const next = id === 'custom' ? custom : effectById(id)!
     setEffectId(id)
     setValues(resolveValues(next.params))
+    setCommon({ ...DEFAULT_COMMON, ...next.defaultCommon })
   }
 
   // Текущий пресет — тот, с которым совпадают все значения эффекта.
@@ -224,7 +225,7 @@ export function App() {
             className="button button--small"
             onClick={() => {
               setValues(resolveValues(effect.params))
-              setCommon(DEFAULT_COMMON)
+              setCommon({ ...DEFAULT_COMMON, ...effect.defaultCommon })
             }}
           >
             Сбросить

@@ -351,6 +351,8 @@ export function createEffect(canvas, spec, options = {}) {
   // Переход: from → to, прогресс едет 0 → 1 за duration секунд. Длительность и
   // автопрокрутку рантайм читает из параметров эффекта (duration, autoplay).
   const slide = { from: 0, to: 0, progress: 1, direction: 1, active: false, idle: 0 }
+  // «Смена при наведении» (spec.hoverSwap): прогресс 0 → 1, пока курсор над картинкой.
+  const hoverSwap = { value: 0 }
   const slideCount = slideSlots.length
   const goTo = (index, direction) => {
     if (!slideCount) return
@@ -547,7 +549,11 @@ export function createEffect(canvas, spec, options = {}) {
       }
     } else slowFrames = Math.max(0, slowFrames - 1)
 
-    const settling = Math.abs(pointer.hover - pointer.thover) > 0.001
+    if (spec.hoverSwap) {
+      const k = 1 - Math.exp((-dt * 3) / Math.max(0.05, Number(values.duration ?? 0.8)))
+      hoverSwap.value += (pointer.thover - hoverSwap.value) * k
+    }
+    const settling = Math.abs(pointer.hover - pointer.thover) > 0.001 || (spec.hoverSwap && Math.abs(hoverSwap.value - pointer.thover) > 0.001)
     if (running() || settling) requestDraw()
     else last = 0
   }
@@ -646,8 +652,8 @@ export function createEffect(canvas, spec, options = {}) {
       gl.uniform2f(main.loc('uImageRes'), imageSlot.size[0], imageSlot.size[1])
     }
     if (slideCount) {
-      const from = slideSlots[slide.active ? slide.from : slide.to]
-      const to = slideSlots[slide.to]
+      const from = spec.hoverSwap ? slideSlots[0] : slideSlots[slide.active ? slide.from : slide.to]
+      const to = spec.hoverSwap ? slideSlots[Math.min(1, slideCount - 1)] : slideSlots[slide.to]
       gl.activeTexture(gl.TEXTURE2)
       gl.bindTexture(gl.TEXTURE_2D, from.texture)
       gl.uniform1i(main.loc('uFrom'), 2)
@@ -656,7 +662,7 @@ export function createEffect(canvas, spec, options = {}) {
       gl.uniform1i(main.loc('uTo'), 3)
       gl.uniform2f(main.loc('uFromRes'), from.size[0], from.size[1])
       gl.uniform2f(main.loc('uToRes'), to.size[0], to.size[1])
-      gl.uniform1f(main.loc('uProgress'), slide.active ? easeInOut(slide.progress) : 1)
+      gl.uniform1f(main.loc('uProgress'), spec.hoverSwap ? hoverSwap.value : slide.active ? easeInOut(slide.progress) : 1)
       gl.uniform1f(main.loc('uDirection'), slide.direction)
     }
     gl.bindVertexArray(vao)

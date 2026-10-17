@@ -43,7 +43,7 @@ export function ParamControl(props: ParamProps) {
 export function inactiveNote(param: Param, params: Record<string, Param>, values: Values): string | null {
   if (!param.when) return null
   for (const [key, allowed] of Object.entries(param.when)) {
-    if (allowed.includes(values[key] as string | boolean)) continue
+    if (allowed.includes(values[key])) continue
     const other = params[key]
     const names = allowed.map((a) => (other?.type === 'select' ? (other.options.find((o) => o.value === a)?.label ?? a) : a === true ? 'вкл.' : a === false ? 'выкл.' : a))
     return `Действует, когда «${other?.label ?? key}»: ${names.map((n) => `«${n}»`).join(' или ')}`

@@ -605,6 +605,50 @@
   display: none;
 }
 
+.preview--ui {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 18px;
+  background:
+    radial-gradient(circle at 30% 20%, rgba(167, 139, 250, 0.12), transparent 50%),
+    var(--surface);
+}
+
+.preview--ui ~ .stage__caption {
+  display: none;
+}
+
+.liquid-demo {
+  padding: 22px 46px;
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.preloader-demo {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: linear-gradient(160deg, #f6f1e7, #e8dcc8);
+  color: #1d1712;
+}
+
+.preloader-demo__site {
+  display: grid;
+  align-content: center;
+  gap: 10px;
+  height: 100%;
+  padding: 40px;
+}
+
+.preloader-demo__site h2 {
+  font-size: clamp(32px, 5vw, 64px);
+  letter-spacing: -0.03em;
+}
+
 /* ── Параметры ──────────────────────────────────────────────── */
 .panel {
   grid-area: panel;

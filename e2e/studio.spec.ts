@@ -42,7 +42,7 @@ for (const effect of EFFECTS) {
     // 3D в CI рисует программный рендер (SwiftShader): меньше пикселей и больше времени.
     if (effect.kind === 'three') test.slow()
     await page.goto(`studio.html?e=${effect.id}${effect.kind === 'three' ? '&_quality=0.5' : ''}`)
-    await expect(page.getByRole('heading', { level: 1, name: effect.name }).or(page.locator('.preview--image, .preview--tilt, .preview--transition, .preview--cursor'))).toBeVisible()
+    await expect(page.getByRole('heading', { level: 1, name: effect.name }).or(page.locator('.preview--image, .preview--tilt, .preview--transition, .preview--cursor, .preview--ui'))).toBeVisible()
     await expect(page.locator('.preview__error')).toHaveCount(0)
     if (effect.kind === 'transition') {
       // Прокручиваем мини-страницу превью: на середине стека секция горит, в конце — скрыта.
@@ -61,6 +61,20 @@ for (const effect of EFFECTS) {
       await expect(cover).toHaveCSS('visibility', 'hidden')
       await demo.evaluate((d) => d.scrollTo(0, 0))
       await expect(cover).toHaveCSS('visibility', 'visible')
+    } else if (effect.kind === 'ui') {
+      // Кнопка — наводим и жмём; прелоадер — сам идёт. Картинка меняется.
+      const before = (await page.locator('.preview').screenshot()).toString('base64')
+      const btn = page.locator('.liquid-demo')
+      if (await btn.count()) {
+        // Мышью по координатам: капли вокруг кнопки всё время шевелятся, и Playwright
+        // не дождался бы «стабильности» для hover()/click().
+        const bb = (await btn.boundingBox())!
+        await page.mouse.move(bb.x + bb.width * 0.8, bb.y + 10, { steps: 6 })
+        await page.mouse.down()
+        await page.mouse.up()
+      }
+      await page.waitForTimeout(500)
+      expect((await page.locator('.preview').screenshot()).toString('base64')).not.toBe(before)
     } else if (effect.kind === 'cursor' || effect.overlay) {
       // Курсор: проводим мышью по демо-странице — след появляется.
       const box = (await page.locator('.preview').boundingBox())!
@@ -343,3 +357,43 @@ for (const id of ['cursor-trail', 'cursor-fluid']) {
     expect(errors).toEqual([])
   })
 }
+
+test('экспорт прелоадера: на чистой странице закрывает и открывает её', async ({ page }) => {
+  await page.goto('studio.html?e=preloader&duration=0.5&revealTime=0.3')
+  await page.getByRole('button', { name: 'Забрать код' }).click()
+  const code = await page.getByRole('dialog').locator('code').textContent()
+  const errors: string[] = []
+  page.on('pageerror', (e) => errors.push(e.message))
+  await page.goto('about:blank')
+  await page.setContent('<h1>Сайт</h1>')
+  const done = await page.evaluate(async (source) => {
+    const url = URL.createObjectURL(new Blob([source!], { type: 'text/javascript' }))
+    const { mount } = await import(/* @vite-ignore */ url)
+    const loader = mount()
+    const covered = getComputedStyle(document.querySelector('[role="progressbar"]')!).display !== 'none'
+    await loader.finished
+    return { covered, hidden: getComputedStyle(document.querySelector('[role="progressbar"]')!).display === 'none' }
+  }, code)
+  expect(done).toEqual({ covered: true, hidden: true })
+  expect(errors).toEqual([])
+})
+
+test('экспорт жидкой кнопки: кнопка остаётся кнопкой', async ({ page }) => {
+  await page.goto('studio.html?e=liquid-button')
+  await page.getByRole('button', { name: 'Забрать код' }).click()
+  const code = await page.getByRole('dialog').locator('code').textContent()
+  await page.goto('about:blank')
+  await page.setContent('<button class="liquid" style="padding:18px 40px;border:0">Жми</button>')
+  const clicks = await page.evaluate(async (source) => {
+    const url = URL.createObjectURL(new Blob([source!], { type: 'text/javascript' }))
+    const { mount } = await import(/* @vite-ignore */ url)
+    mount('.liquid')
+    let n = 0
+    document.querySelector('.liquid')!.addEventListener('click', () => n++)
+    return new Promise<number>((r) => setTimeout(() => r(n), 50))
+  }, code)
+  expect(clicks).toBe(0)
+  const bb = (await page.getByRole('button', { name: 'Жми' }).boundingBox())!
+  await page.mouse.click(bb.x + 20, bb.y + 20)
+  expect(await page.evaluate(() => document.querySelector('.liquid')!.querySelector('[aria-hidden]') !== null)).toBe(true)
+})

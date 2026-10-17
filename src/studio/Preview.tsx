@@ -13,6 +13,7 @@ import type { EffectDef } from '../effects/types'
 import { runtimeOptions, type Common } from '../engine/params'
 import { createEffect, type EffectInstance, type Values } from '../runtime/runtime'
 import { createCursor, type CursorInstance } from '../runtime/cursor'
+import { createLiquidButton, createPreloader, type LiquidButtonInstance, type PreloaderInstance } from '../runtime/ui'
 import type { SceneInstance } from '../runtime/scene'
 import { createTilt, type TiltInstance } from '../runtime/tilt'
 import { createTransition, type TransitionInstance, type TransitionTrigger } from '../runtime/transition'
@@ -60,6 +61,8 @@ export function Preview(props: Props) {
   if (props.effect.kind === 'transition') return <TransitionPreview {...props} />
   if (props.effect.kind === 'slides') return <SlidesPreview key={props.effect.id} {...props} />
   if (props.effect.kind === 'three') return <ScenePreview key={props.effect.id} {...props} />
+  if (props.effect.id === 'liquid-button') return <LiquidButtonPreview key={props.effect.id} {...props} />
+  if (props.effect.id === 'preloader') return <PreloaderPreview key={props.effect.id} {...props} />
   if (props.effect.kind === 'cursor' || props.effect.overlay) return <CursorPreview key={props.effect.id} {...props} />
   // Режим «по прокрутке» — мини-страница, которую можно листать (своя разметка → свой key).
   const scroll = props.values.cycle === 'scroll'
@@ -281,7 +284,7 @@ function SlidesPreview({ effect, values, common, image }: Props) {
       const { values: v, common: c } = latest.current
       instance.current = createEffect(
         canvas,
-        { name: effect.name, fragment: effect.fragment!, params: effect.params, values: v, images },
+        { name: effect.name, fragment: effect.fragment!, params: effect.params, values: v, images: effect.hoverSwap ? images.slice(0, 2) : images, hoverSwap: effect.hoverSwap },
         { ...runtimeOptions(c), post: c.post, reducedMotion: false },
       )
     } catch (e) {
@@ -306,6 +309,9 @@ function SlidesPreview({ effect, values, common, image }: Props) {
       <div ref={host} className="slider">
         <img src={images[0]} alt="Слайд 1" />
       </div>
+      {effect.hoverSwap ? (
+        <p className="preview__hint">Наведите курсор на картинку</p>
+      ) : (
       <div className="slider__nav">
         <button type="button" className="icon-button" aria-label="Предыдущий слайд" onClick={() => instance.current?.prev()}>
           ←
@@ -317,6 +323,7 @@ function SlidesPreview({ effect, values, common, image }: Props) {
           →
         </button>
       </div>
+      )}
       {error && <p className="preview__error">{error}</p>}
     </div>
   )
@@ -451,6 +458,83 @@ function CursorPreview({ effect, values, common }: Props) {
         </div>
       </div>
       {error && <p className="preview__error">{error}</p>}
+    </div>
+  )
+}
+
+/** Жидкая кнопка на тёмном фоне по центру превью. */
+function LiquidButtonPreview({ values }: Props) {
+  const button = useRef<HTMLButtonElement>(null)
+  const instance = useRef<LiquidButtonInstance | null>(null)
+  const latest = useRef(values)
+  useLayoutEffect(() => {
+    latest.current = values
+  })
+  useEffect(() => {
+    if (!button.current) return
+    instance.current = createLiquidButton(button.current, latest.current)
+    return () => instance.current?.destroy()
+  }, [])
+  useEffect(() => instance.current?.set(values), [values])
+  return (
+    <div className="preview preview--ui">
+      <button ref={button} type="button" className="liquid-demo">
+        {String(values.label)}
+      </button>
+      <p className="preview__hint">Наведите, поводите и нажмите</p>
+    </div>
+  )
+}
+
+/** Прелоадер над демо-страницей; «Показать ещё раз» — заново. */
+function PreloaderPreview({ values }: Props) {
+  const host = useRef<HTMLDivElement>(null)
+  const instance = useRef<PreloaderInstance | null>(null)
+  const latest = useRef(values)
+  useLayoutEffect(() => {
+    latest.current = values
+  })
+  const [manual, setManual] = useState(0)
+  useEffect(() => {
+    if (!host.current) return
+    instance.current = createPreloader(host.current, latest.current)
+    return () => instance.current?.destroy()
+    // Новый текст, вид или режим — новый прелоадер с начала.
+  }, [values.text, values.style, values.mode, values.reveal])
+  useEffect(() => instance.current?.set(values), [values])
+  return (
+    <div className="preview preview--ui">
+      <div ref={host} className="preloader-demo">
+        <div className="preloader-demo__site">
+          <p className="demo__eyebrow">Сайт загрузился</p>
+          <h2>Здесь ваш контент</h2>
+        </div>
+      </div>
+      <div className="demo__controls">
+        {values.mode === 'manual' && (
+          <button
+            type="button"
+            className="button"
+            onClick={() => {
+              const next = Math.min(1, manual + 0.25)
+              setManual(next)
+              instance.current?.progress(next)
+            }}
+          >
+            +25 %
+          </button>
+        )}
+        <button
+          type="button"
+          className="button button--primary"
+          onClick={() => {
+            setManual(0)
+            instance.current?.replay()
+          }}
+        >
+          Показать ещё раз
+        </button>
+      </div>
     </div>
   )
 }

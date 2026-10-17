@@ -20,6 +20,8 @@ import tiltSource from '../runtime/tilt.js?raw'
 // oxlint-disable-next-line import/default
 import cursorSource from '../runtime/cursor.js?raw'
 // oxlint-disable-next-line import/default
+import uiSource from '../runtime/ui.js?raw'
+// oxlint-disable-next-line import/default
 import sceneSource from '../runtime/scene.js?raw'
 // oxlint-disable-next-line import/default
 import galaxySource from '../runtime/three/galaxy.js?raw'
@@ -87,7 +89,8 @@ const SPEC = {
   fragment: ${JSON.stringify(effect.fragment)},
   params: ${json(runtimeParams(effect))},
   values: ${json(values)},${effect.simulation ? `
-  simulation: ${json(effect.simulation)},` : ''}
+  simulation: ${json(effect.simulation)},` : ''}${effect.hoverSwap ? `
+  hoverSwap: true,` : ''}
 }
 
 const OPTIONS = ${json({ ...runtimeOptions(common), post: common.post })}${effect.overlay ? `\nconst VALUES_HIDE_CURSOR = ${Boolean(values.hideCursor)}` : ''}
@@ -232,6 +235,42 @@ export function mount(target, options = {}) {
 `
 }
 
+function uiModule(effect: EffectDef, values: Values, link?: string) {
+  const isButton = effect.id === 'liquid-button'
+  const { label: _label, ...rest } = values
+  const head = header(effect, link).replace("mount(document.querySelector('#hero-bg'))", isButton ? "mount('.liquid')   // все кнопки с классом" : 'const loader = mount()')
+  return `${head}
+${uiSource.trim()}
+
+const VALUES = ${json(isButton ? rest : { ...values, name: effect.name })}
+${
+  isButton
+    ? `
+/**
+ * Сделать кнопки жидкими.
+ * @param {HTMLElement | string} target — кнопка или селектор ('.liquid')
+ * @param {object} [overrides] — { color: '#ff5a1f' }
+ */
+export function mount(target, overrides = {}) {
+  const els = typeof target === 'string' ? [...document.querySelectorAll(target)] : [target]
+  const items = els.map((el) => createLiquidButton(el, { ...VALUES, ...overrides }))
+  return { destroy: () => items.forEach((i) => i.destroy()), set: (next) => items.forEach((i) => i.set(next)) }
+}
+`
+    : `
+/**
+ * Показать прелоадер. Вызывайте как можно раньше (скрипт — в начале <body>).
+ * @param {HTMLElement} [target] — по умолчанию вся страница
+ * @param {object} [overrides] — { text: 'Моя студия', mode: 'manual' }
+ * @returns {{ progress(p): void, done(): void, finished: Promise<void>, destroy(): void }}
+ */
+export function mount(target = document.body, overrides = {}) {
+  return createPreloader(target, { ...VALUES, ...overrides })
+}
+`
+}`
+}
+
 function cursorModule(effect: EffectDef, values: Values, link?: string) {
   return `${header(effect, link).replace("mount(document.querySelector('#hero-bg'))", 'mount()   // вся страница; или mount(блок)')}
 ${cursorSource.trim()}
@@ -289,6 +328,23 @@ export function mount(target, options = {}) {
 
 function elementWrapper(effect: EffectDef) {
   const tag = elementTag(effect)
+  if (effect.kind === 'ui') {
+    const make = effect.id === 'liquid-button' ? "mount(this.querySelector('button, a') ?? this)" : 'mount(document.body)'
+    return `
+
+/** Веб-компонент <${tag}>. */
+class Ui extends HTMLElement {
+  connectedCallback() {
+    this.instance = ${make}
+  }
+  disconnectedCallback() {
+    this.instance?.destroy()
+    this.instance = null
+  }
+}
+if (!customElements.get('${tag}')) customElements.define('${tag}', Ui)
+`
+  }
   if (effect.kind === 'cursor' || effect.overlay) {
     return `
 
@@ -445,6 +501,24 @@ ${load(`mount(target, { once: false })   // once: true — сгореть оди
 
 function slidesUsage(effect: EffectDef, options: ExportOptions) {
   const tag = elementTag(effect)
+  if (effect.hoverSwap) {
+    const imgs2 = `  <img src="photo-1.jpg" alt="Фото" width="1200" height="800">\n  <img src="photo-2.jpg" alt="" width="1200" height="800">`
+    const css = `<style>\n  .photo { position: relative; overflow: hidden; }\n  .photo img { display: block; width: 100%; height: auto; }\n</style>`
+    if (options.format === 'element')
+      return `<script type="module" src="./effect.js"></script>\n\n<!-- Первая картинка — обычная, вторая проявится при наведении. -->\n<${tag} class="photo">\n${imgs2}\n</${tag}>\n\n${css}\n`
+    return `<!-- Первая картинка — обычная, вторая проявится при наведении. Без WebGL видна первая. -->
+<div id="photo" class="photo">
+${imgs2}
+</div>
+
+${css}
+
+<script type="module">
+  import { mount } from './effect.js'
+  mount(document.querySelector('#photo'))
+</script>
+`
+  }
   const imgs = `    <img src="slide-1.jpg" alt="Первый слайд" width="1200" height="800">
     <img src="slide-2.jpg" alt="Второй слайд" width="1200" height="800">
     <img src="slide-3.jpg" alt="Третий слайд" width="1200" height="800">`
@@ -546,6 +620,40 @@ function scrollStageUsage(effect: EffectDef, options: ExportOptions) {
 `
 }
 
+function uiUsage(effect: EffectDef, options: ExportOptions, values: Values) {
+  const tag = elementTag(effect)
+  if (effect.id === 'liquid-button') {
+    if (options.format === 'element')
+      return `<script type="module" src="./effect.js"></script>\n\n<!-- Внутри тега — обычная кнопка или ссылка. -->\n<${tag}><button type="button">${values.label}</button></${tag}>\n`
+    return `<button type="button" class="liquid">${values.label}</button>
+
+<style>
+  /* Кнопке — только отступы и шрифт: фон и «жидкость» рисует эффект. */
+  .liquid { padding: 18px 40px; border: 0; border-radius: 999px; font: 700 18px/1 system-ui, sans-serif; cursor: pointer; }
+</style>
+
+<script type="module">
+  import { mount } from './effect.js'
+  mount('.liquid')
+</script>
+`
+  }
+  if (options.format === 'element') return `<!-- Сразу после <body>: прелоадер закроет страницу и откроет её, когда закончит. -->\n<script type="module" src="./effect.js"></script>\n<${tag}></${tag}>\n`
+  return `<!-- Сразу после <body>: прелоадер закроет страницу и откроет её, когда закончит. -->
+<script type="module">
+  import { mount } from './effect.js'
+  const loader = mount()
+${
+  values.mode === 'manual'
+    ? `  // Прогресс из кода — например, по загрузке картинок:
+  // loader.progress(загружено / всего)
+  // loader.done()`
+    : '  // loader.finished.then(() => { /* запустить анимации страницы */ })'
+}
+</script>
+`
+}
+
 function cursorUsage(effect: EffectDef, options: ExportOptions) {
   const tag = elementTag(effect)
   if (options.format === 'element') return `<script type="module" src="./effect.js"></script>\n\n<!-- Курсор на всю страницу: тег можно поставить куда угодно, один раз. -->\n<${tag}></${tag}>\n`
@@ -561,6 +669,7 @@ function cursorUsage(effect: EffectDef, options: ExportOptions) {
 function usageHtml(effect: EffectDef, options: ExportOptions, values: Values) {
   if (effect.kind === 'transition') return transitionUsage(effect, options, values)
   if (effect.kind === 'cursor' || effect.overlay) return cursorUsage(effect, options)
+  if (effect.kind === 'ui') return uiUsage(effect, options, values)
   if (values.cycle === 'scroll') return scrollStageUsage(effect, options)
   if (effect.kind === 'slides') return slidesUsage(effect, options)
   // Заглушка — цвет фона эффекта (если он есть), иначе первый цвет.
@@ -771,7 +880,45 @@ export function Cursor() {
 `
 }
 
+function reactUi(effect: EffectDef) {
+  if (effect.id === 'liquid-button')
+    return `/**
+ * ${effect.name} — React-компонент из 3D-конструктора.
+ *   <LiquidButton onClick={…}>Нажми меня</LiquidButton>
+ */
+import { useEffect, useRef, type ButtonHTMLAttributes } from 'react'
+import { mount } from './effect.js'
+
+export function LiquidButton({ style, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) {
+  const ref = useRef<HTMLButtonElement>(null)
+  useEffect(() => {
+    if (!ref.current) return
+    const liquid = mount(ref.current)
+    return () => liquid.destroy()
+  }, [])
+  return <button ref={ref} type="button" style={{ padding: '18px 40px', border: 0, borderRadius: 999, font: '700 18px/1 system-ui', cursor: 'pointer', ...style }} {...props} />
+}
+`
+  return `/**
+ * ${effect.name} — React-компонент из 3D-конструктора. Поставьте один раз в корне:
+ *   <Preloader onDone={() => …} />
+ */
+import { useEffect } from 'react'
+import { mount } from './effect.js'
+
+export function Preloader({ onDone }: { onDone?: () => void }) {
+  useEffect(() => {
+    const loader = mount()
+    loader.finished.then(() => onDone?.())
+    return () => loader.destroy()
+  }, [])
+  return null
+}
+`
+}
+
 function reactComponent(effect: EffectDef, options: ExportOptions) {
+  if (effect.kind === 'ui') return reactUi(effect)
   if (effect.kind === 'cursor' || effect.overlay) return reactCursor(effect)
   if (effect.kind === 'transition') return reactTransition(effect, options)
   if (effect.kind === 'slides') return reactSlides(effect, options)
@@ -832,6 +979,8 @@ export function generate(effect: EffectDef, values: Values, common: Common, opti
         ? sceneModule(effect, values, common, options.link)
       : effect.kind === 'cursor'
         ? cursorModule(effect, values, options.link)
+      : effect.kind === 'ui'
+        ? uiModule(effect, values, options.link)
       : effect.kind === 'transition'
         ? transitionModule(effect, values, options.link)
         : shaderModule(effect, values, common, options.link)
@@ -841,7 +990,13 @@ export function generate(effect: EffectDef, values: Values, common: Common, opti
     files.push({ name: 'index.html', language: 'html', code: usageHtml(effect, options, values) })
   } else if (options.format === 'react') {
     const component =
-      effect.kind === 'transition' ? 'Transition.tsx' : effect.kind === 'slides' ? 'Slider.tsx' : effect.kind === 'cursor' || effect.overlay ? 'Cursor.tsx' : 'Effect.tsx'
+      effect.kind === 'transition' ? 'Transition.tsx' : effect.kind === 'slides' ? 'Slider.tsx' : effect.kind === 'cursor' || effect.overlay
+          ? 'Cursor.tsx'
+          : effect.id === 'liquid-button'
+            ? 'LiquidButton.tsx'
+            : effect.id === 'preloader'
+              ? 'Preloader.tsx'
+              : 'Effect.tsx'
     files.push({ name: component, language: 'tsx', code: reactComponent(effect, options) })
     files.push({ name: 'effect.js', language: 'js', code: base })
   } else {
