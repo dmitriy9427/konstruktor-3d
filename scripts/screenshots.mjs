@@ -32,7 +32,8 @@ const hover = async (page, selector) => {
   await page.waitForTimeout(500)
 }
 
-await shot('home', { path: '/' })
+// Главная: ждём, пока прелоадер откроет страницу и проявится фон.
+await shot('home', { path: '/', steps: (p) => p.waitForTimeout(3500) })
 await shot('studio-waves', { path: '/studio.html?e=waves' })
 await shot('studio-aurora', { path: '/studio.html?e=aurora&background=02060c&colorA=1fe08a&colorB=22d3ee&colorC=7b5cff' })
 await shot('studio-lava', { path: '/studio.html?e=lava' })

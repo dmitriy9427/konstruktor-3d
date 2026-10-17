@@ -424,9 +424,26 @@ export function createTransition(el, values = {}, options = {}) {
     const r = el.getBoundingClientRect()
     const pr = canvas.parentElement.getBoundingClientRect()
     const parent = canvas.parentElement
-    const cssW = r.width + PAD * 2
+    // По горизонтали запас не выходит за края окна — иначе у страницы появится
+    // горизонтальная прокрутка (секция на всю ширину + 80px огня с каждой стороны).
+    const viewW = document.documentElement.clientWidth
+    const padL = Math.min(PAD, Math.max(0, r.left))
+    const padR = Math.min(PAD, Math.max(0, viewW - r.right))
+    const cssW = r.width + padL + padR
     const cssH = r.height + PAD * 2
-    canvas.style.transform = `translate(${r.left - pr.left - parent.clientLeft + parent.scrollLeft - PAD}px, ${r.top - pr.top - parent.clientTop + parent.scrollTop - PAD}px)`
+    // «Липкая» секция, пока прилипла, стоит на месте экрана, а контейнер под ней
+    // едет. Прокрутку браузер двигает сам (в отдельном потоке), а наш transform
+    // догоняет её только в следующем кадре — холст в контейнере дрожал бы.
+    // Поэтому на это время холст фиксируем на экране, там же, где секция.
+    const cs = getComputedStyle(el)
+    const stuck = cs.position === 'sticky' && cs.top !== 'auto' && Math.abs(r.top - (opts.scroller ? opts.scroller.getBoundingClientRect().top : 0) - parseFloat(cs.top)) < 1
+    if (stuck) {
+      canvas.style.position = 'fixed'
+      canvas.style.transform = `translate(${r.left - padL}px, ${r.top - PAD}px)`
+    } else {
+      canvas.style.position = 'absolute'
+      canvas.style.transform = `translate(${r.left - pr.left - parent.clientLeft + parent.scrollLeft - padL}px, ${r.top - pr.top - parent.clientTop + parent.scrollTop - PAD}px)`
+    }
     canvas.style.width = `${cssW}px`
     canvas.style.height = `${cssH}px`
     const dpr = Math.min(globalThis.devicePixelRatio || 1, 1.5)
@@ -452,7 +469,7 @@ export function createTransition(el, values = {}, options = {}) {
       gl.activeTexture(gl.TEXTURE0)
       gl.bindTexture(gl.TEXTURE_2D, fx.texture)
       gl.uniform1i(u('uField'), 0)
-      gl.uniform4f(u('uRect'), PAD * dpr, PAD * dpr, r.width * dpr, r.height * dpr)
+      gl.uniform4f(u('uRect'), padL * dpr, PAD * dpr, r.width * dpr, r.height * dpr)
       gl.uniform1f(u('uT'), threshold(current))
       gl.uniform1f(u('uEdge'), edge)
       gl.uniform1f(u('uChar'), v.char)
@@ -483,7 +500,7 @@ export function createTransition(el, values = {}, options = {}) {
     }
     if (particles.length) {
       const data = new Float32Array(particles.length * 4)
-      particles.forEach((q, i) => data.set([(q.x + PAD) * dpr, (cssH - q.y - PAD) * dpr, q.life, q.size * dpr], i * 4))
+      particles.forEach((q, i) => data.set([(q.x + padL) * dpr, (cssH - q.y - PAD) * dpr, q.life, q.size * dpr], i * 4))
       const { p, u } = fx.ash
       gl.useProgram(p)
       gl.bindBuffer(gl.ARRAY_BUFFER, fx.ashBuffer)

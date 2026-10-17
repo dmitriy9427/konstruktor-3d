@@ -4,27 +4,114 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="dark" />
-    <meta name="description" content="3D-конструктор: шейдерные фоны, искажение картинок, наклон карточек и постобработка. Подкрутите параметры и заберите готовый код." />
+    <meta name="description" content="3D-конструктор: шейдерные фоны, переходы, 3D, курсоры и интерфейс. Подкрутите параметры и заберите готовый код." />
     <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
     <title>3D-конструктор</title>
   </head>
   <body>
-    <section class="hero" id="hero">
-      <div class="hero__bg" id="hero-bg"></div>
-      <header class="hero__top">
-        <a class="brand" href="./"><span class="brand__mark" aria-hidden="true"></span>3D-конструктор</a>
-        <a class="button" href="https://github.com/dmitriy9427/konstruktor-3d">GitHub</a>
-      </header>
-      <div class="hero__content">
-        <p class="hero__eyebrow">WebGL · GLSL · без библиотек в рантайме</p>
-        <h1>Анимации, которые <span>собираются ползунками</span></h1>
-        <p class="hero__lead">Выберите эффект, подкрутите параметры на экране и заберите код — модуль, React-компонент или веб-компонент. В проекте будет ровно то, что вы видели в превью.</p>
-        <div class="hero__actions">
-          <a class="button button--primary" href="./studio.html">Открыть Студию</a>
-          <a class="button" href="./studio.html?e=lava">Попробовать «Лаву»</a>
-        </div>
+    <header class="nav">
+      <a class="brand" href="./"><span class="brand__mark" aria-hidden="true"></span>3D-конструктор</a>
+      <nav class="nav__links" aria-label="Разделы">
+        <a href="#day">Фоны</a>
+        <a href="#burn">Переходы</a>
+        <a href="#morph">3D</a>
+        <a href="#gallery">Фото</a>
+      </nav>
+      <div class="nav__actions">
+        <button type="button" class="button button--small" id="cursor-toggle" aria-pressed="true">Курсор: звезда</button>
+        <a class="button button--primary button--small" href="./studio.html">Студия</a>
       </div>
-    </section>
+    </header>
+
+    <main>
+      <!-- 1. Герой -->
+      <section class="hero" id="hero">
+        <div class="hero__bg" data-effect="aurora"></div>
+        <div class="hero__content">
+          <p class="eyebrow" data-reveal>WebGL · GLSL · three.js · GSAP</p>
+          <h1 class="hero__title" data-split>Анимации, которые собираются ползунками</h1>
+          <p class="lead" data-reveal>
+            Выберите эффект, подкрутите параметры и заберите код — модуль, React-компонент или веб-компонент. Вся эта страница собрана из эффектов конструктора.
+          </p>
+          <div class="hero__actions" data-reveal>
+            <a class="button button--primary button--big" href="./studio.html">Открыть Студию</a>
+            <a class="button button--big" href="#day">Листать вниз ↓</a>
+          </div>
+        </div>
+        <p class="hero__scroll" aria-hidden="true">прокрутите</p>
+      </section>
+
+      <!-- 2. Сутки над морем: море прилипло, прокрутка меняет время суток -->
+      <section class="day" id="day">
+        <div class="day__bg" data-effect="waves"></div>
+        <div class="day__scene"><p class="eyebrow">Фон «Волны» · прокрутка</p><h2 data-split>Рассвет</h2><p class="lead">Море стоит на месте — меняется только время суток.</p></div>
+        <div class="day__scene"><h2 data-split>День</h2></div>
+        <div class="day__scene"><h2 data-split>Закат</h2></div>
+        <div class="day__scene"><h2 data-split>Шторм</h2><p class="lead">Дождь, молнии и валы включаются сами.</p></div>
+        <div class="day__scene"><h2 data-split>Ночь</h2></div>
+      </section>
+
+      <!-- 3. Переход «Прожигание»: светлая секция прогорает в следующую -->
+      <div class="burn" id="burn">
+        <section class="burn__top">
+          <p class="eyebrow">Переход «Прожигание» · прокрутка</p>
+          <h2 data-split>Секция прогорает — и открывает следующую</h2>
+          <p class="lead">Это настоящая HTML-секция: текст выделяется, ссылки работают. Дыры режет SVG-фильтр, огонь и пепел рисует шейдер поверх.</p>
+        </section>
+        <section class="burn__under" data-effect="fire">
+          <div class="burn__under-text">
+            <p class="eyebrow">Фон «Огонь»</p>
+            <h2>А под ней — огонь</h2>
+          </div>
+        </section>
+      </div>
+
+      <!-- 4. 3D: логотип перетекает в сферу по прокрутке -->
+      <section class="morph" id="morph">
+        <div class="morph__stage" data-effect="morph"></div>
+        <div class="morph__text">
+          <p class="eyebrow">3D «Морфинг» · GSAP ScrollTrigger</p>
+          <h2 data-split>Логотип из частиц становится сферой</h2>
+          <p class="lead">Прогресс превращения привязан к прокрутке: <code>ScrollTrigger</code> вызывает <code>effect.progress(p)</code>. Вращение и вихрь — в вершинном шейдере.</p>
+        </div>
+      </section>
+
+      <!-- 5. Фото: жидкая смена при наведении -->
+      <section class="gallery" id="gallery">
+        <div class="gallery__head">
+          <p class="eyebrow" data-reveal>Изображения</p>
+          <h2 data-split>Наведите на фото</h2>
+        </div>
+        <div class="gallery__grid">
+          <figure class="card" data-hover="liquid" data-a="demo/tropics-photo.jpg" data-b="demo/tropics.svg"><img src="demo/tropics-photo.jpg" alt="Пальма на закате у моря" width="1600" height="998" loading="lazy" /><figcaption>Жидкость</figcaption></figure>
+          <figure class="card" data-hover="drop" data-a="demo/photo.svg" data-b="demo/photo-3.svg"><img src="demo/photo.svg" alt="Горы на закате" width="1200" height="800" loading="lazy" /><figcaption>Капля</figcaption></figure>
+          <figure class="card" data-hover="bands" data-a="demo/photo-2.svg" data-b="demo/tropics.svg"><img src="demo/photo-2.svg" alt="Пустыня" width="1200" height="800" loading="lazy" /><figcaption>Помехи</figcaption></figure>
+        </div>
+      </section>
+
+      <!-- 6. Стеклянные фигуры -->
+      <section class="glass" id="glass">
+        <div class="glass__stage" data-effect="glass-shapes"></div>
+        <div class="glass__text">
+          <p class="eyebrow">3D «Стеклянные фигуры»</p>
+          <h2 data-split>Стекло, которое расступается</h2>
+          <p class="lead">Поводите мышью — фигуры уходят от курсора и преломляют фон.</p>
+        </div>
+      </section>
+
+      <!-- 7. Финал -->
+      <section class="finale" id="finale">
+        <div class="finale__bg" data-effect="space"></div>
+        <div class="finale__content">
+          <h2 data-split>Соберите свою анимацию</h2>
+          <p class="lead" data-reveal>48 эффектов, траектории, свой шейдер и учебник из 17 глав.</p>
+          <div class="finale__actions" data-reveal>
+            <a class="liquid-cta" href="./studio.html">Открыть Студию</a>
+            <a class="button button--big" href="https://github.com/dmitriy9427/konstruktor-3d">GitHub</a>
+          </div>
+        </div>
+      </section>
+    </main>
     <script type="module" src="/src/site/main.ts"></script>
   </body>
 </html>
