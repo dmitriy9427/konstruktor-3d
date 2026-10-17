@@ -220,4 +220,115 @@ export const flashlightCursor: EffectDef = {
   ],
 }
 
-export const CURSORS = [fluidCursor, smokeCursor, trailCursor, ringCursor, flashlightCursor]
+export const cometCursor: EffectDef = {
+  id: 'cursor-comet',
+  name: 'Падающая звезда',
+  category: 'Курсоры',
+  kind: 'cursor',
+  description: 'Яркая голова и сужающийся светящийся хвост',
+  params: {
+    size: { type: 'number', label: 'Толщина', min: 2, max: 30, step: 0.5, default: 8 },
+    tailLength: { type: 'number', label: 'Длина хвоста', min: 5, max: 120, step: 1, default: 40, hint: 'Сколько кадров помнит хвост' },
+    lag: { type: 'number', label: 'Запаздывание', min: 0.01, max: 0.5, step: 0.01, default: 0.05 },
+    rainbow: { type: 'boolean', label: 'Радуга', default: false },
+    colorA: { type: 'color', label: 'Голова', default: '#fff1a8', when: { rainbow: [false] } },
+    colorB: { type: 'color', label: 'Хвост', default: '#7c4dff', when: { rainbow: [false] } },
+    ...hide,
+  },
+  presets: [
+    { name: 'Звезда', values: {} },
+    { name: 'Радуга', values: { rainbow: true, tailLength: 70, size: 10 } },
+    { name: 'Метеор', values: { colorA: '#ffd166', colorB: '#ff3d1f', size: 14, tailLength: 25 } },
+  ],
+}
+
+export const neonCursor: EffectDef = {
+  id: 'cursor-neon',
+  name: 'Неон',
+  category: 'Курсоры',
+  kind: 'cursor',
+  description: 'Светящаяся неоновая трубка тянется за курсором',
+  params: {
+    size: { type: 'number', label: 'Толщина', min: 1, max: 20, step: 0.5, default: 6 },
+    lag: { type: 'number', label: 'Тягучесть', min: 0, max: 0.9, step: 0.01, default: 0.6, hint: 'Больше — трубка длиннее и плавнее отстаёт' },
+    glowAmt: { type: 'number', label: 'Свечение', min: 0, max: 3, step: 0.01, default: 1 },
+    rainbow: { type: 'boolean', label: 'Переливается', default: true },
+    colorA: { type: 'color', label: 'Цвет', default: '#22d3ee', when: { rainbow: [false] } },
+    ...hide,
+  },
+  presets: [
+    { name: 'Радуга', values: { rainbow: true } },
+    { name: 'Розовый неон', values: { rainbow: false, colorA: '#ff4fa3', glowAmt: 1.6 } },
+    { name: 'Тонкий', values: { rainbow: false, colorA: '#a78bfa', size: 2, lag: 0.8 } },
+  ],
+}
+
+export const flowCursor: EffectDef = {
+  id: 'cursor-flow',
+  name: 'Поток линий',
+  category: 'Курсоры',
+  kind: 'cursor',
+  description: 'Поле штрихов течёт и закручивается вокруг курсора, как опилки у магнита',
+  params: {
+    spacing: { type: 'number', label: 'Шаг сетки, px', min: 12, max: 80, step: 1, default: 28 },
+    thickness: { type: 'number', label: 'Толщина', min: 0.5, max: 6, step: 0.5, default: 2 },
+    radius: { type: 'number', label: 'Радиус курсора, px', min: 40, max: 400, step: 5, default: 160 },
+    grow: { type: 'number', label: 'Удлинение у курсора', min: 0, max: 3, step: 0.01, default: 1 },
+    colorA: { type: 'color', label: 'Штрихи', default: '#4b4b63' },
+    colorB: { type: 'color', label: 'У курсора', default: '#22d3ee' },
+  },
+  presets: [
+    { name: 'Опилки', values: {} },
+    { name: 'Трава', values: { colorA: '#1f5133', colorB: '#a3e635', spacing: 18, thickness: 1.5 } },
+    { name: 'Крупно', values: { spacing: 48, thickness: 4, colorB: '#ff6b9d' } },
+  ],
+}
+
+export const swarmCursor: EffectDef = {
+  id: 'cursor-swarm',
+  name: 'Рой частиц',
+  category: 'Курсоры',
+  kind: 'cursor',
+  description: 'Облако частиц кружит вокруг курсора и тянется за ним',
+  params: {
+    count: { type: 'number', label: 'Частиц', min: 10, max: 400, step: 1, default: 80 },
+    radius: { type: 'number', label: 'Радиус облака, px', min: 10, max: 200, step: 1, default: 50 },
+    orbit: { type: 'number', label: 'Кружение', min: 0, max: 4, step: 0.01, default: 1 },
+    pull: { type: 'number', label: 'Притяжение', min: 0.1, max: 3, step: 0.01, default: 1, hint: 'Меньше — частицы отстают и растягиваются шлейфом' },
+    size: { type: 'number', label: 'Размер', min: 1, max: 10, step: 0.5, default: 3 },
+    rainbow: { type: 'boolean', label: 'Радуга', default: false },
+    colorA: { type: 'color', label: 'Цвет 1', default: '#22d3ee', when: { rainbow: [false] } },
+    colorB: { type: 'color', label: 'Цвет 2', default: '#a78bfa', when: { rainbow: [false] } },
+    colorC: { type: 'color', label: 'Цвет 3', default: '#ff6b9d', when: { rainbow: [false] } },
+    ...hide,
+  },
+  presets: [
+    { name: 'Светлячки', values: { colorA: '#fde047', colorB: '#facc15', colorC: '#fef9c3', pull: 0.5, count: 40 } },
+    { name: 'Галактика', values: { rainbow: true, count: 250, size: 2, orbit: 2 } },
+    { name: 'Шлейф', values: { pull: 0.25, count: 150, radius: 20 } },
+  ],
+}
+
+export const adaptiveCursor: EffectDef = {
+  id: 'cursor-adaptive',
+  name: 'Под контент',
+  category: 'Курсоры',
+  kind: 'cursor',
+  description: 'Кольцо берёт цвет того, над чем находится; над текстом — каретка, над кнопкой — заливка',
+  params: {
+    ringSize: { type: 'number', label: 'Размер', min: 10, max: 80, step: 1, default: 28 },
+    hoverScale: { type: 'number', label: 'Рост над кнопками', min: 1, max: 4, step: 0.05, default: 2.2 },
+    lag: { type: 'number', label: 'Запаздывание', min: 0.01, max: 0.5, step: 0.01, default: 0.1 },
+    matchColor: { type: 'boolean', label: 'Цвет из контента', default: true, hint: 'Цвет текста или фона кнопки под курсором' },
+    invert: { type: 'boolean', label: 'Инверсия над кнопками', default: false },
+    color: { type: 'color', label: 'Свой цвет', default: '#ffffff', when: { matchColor: [false] } },
+    ...hide,
+  },
+  presets: [
+    { name: 'Хамелеон', values: { matchColor: true } },
+    { name: 'Без курсора', values: { matchColor: true, hideCursor: true } },
+    { name: 'Белый', values: { matchColor: false, invert: true } },
+  ],
+}
+
+export const CURSORS = [fluidCursor, smokeCursor, trailCursor, cometCursor, neonCursor, swarmCursor, flowCursor, ringCursor, adaptiveCursor, flashlightCursor]
