@@ -19,6 +19,7 @@ import { Preview } from './Preview'
 /** Готовые картинки для эффектов изображения и слайдов. */
 const DEMOS = [
   { name: 'Тропики', file: 'tropics.svg' },
+  { name: 'Тропики (фото)', file: 'tropics-photo.jpg' },
   { name: 'Закат в горах', file: 'photo.svg' },
   { name: 'Пустыня', file: 'photo-2.svg' },
   { name: 'Ночной город', file: 'photo-3.svg' },
