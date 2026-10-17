@@ -5,6 +5,7 @@
  */
 import { galaxy as galaxySetup } from '../runtime/three/galaxy.js'
 import { glass as glassSetup } from '../runtime/three/glass.js'
+import { glassShapes as glassShapesSetup } from '../runtime/three/glass-shapes.js'
 import { morph as morphSetup } from '../runtime/three/morph.js'
 import { swarm as swarmSetup } from '../runtime/three/swarm.js'
 import { textParticles as textSetup } from '../runtime/three/text-particles.js'
@@ -296,4 +297,67 @@ export const glass: EffectDef = {
   ],
 }
 
-export const THREE_EFFECTS = [galaxy, swarm, morph, textParticles, glass]
+export const glassShapes: EffectDef = {
+  id: 'glass-shapes',
+  name: 'Стеклянные фигуры',
+  category: '3D',
+  kind: 'three',
+  description: 'Кубы, шары, капсулы и кольца из стекла: от мыши, прокрутки или клика',
+  usesMouse: true,
+  setup: glassShapesSetup,
+  setupName: 'glassShapes',
+  addons: ['RoomEnvironment'],
+  params: {
+    behavior: {
+      type: 'select',
+      label: 'Реагируют на',
+      hint: 'Мышь — расступаются от курсора. Прокрутка — всплывают с параллаксом и крутятся. Клик — по фигуре: подпрыгивает; мимо — все разлетаются. Плавают — просто живут',
+      options: [
+        { value: 'mouse', label: 'Мышь' },
+        { value: 'scroll', label: 'Прокрутка' },
+        { value: 'click', label: 'Клик' },
+        { value: 'float', label: 'Плавают' },
+      ],
+      default: 'mouse',
+    },
+    shapes: {
+      type: 'select',
+      label: 'Фигуры',
+      options: [
+        { value: 'mix', label: 'Все' },
+        { value: 'cube', label: 'Кубы' },
+        { value: 'sphere', label: 'Шары' },
+        { value: 'capsule', label: 'Капсулы' },
+        { value: 'ring', label: 'Кольца' },
+      ],
+      default: 'mix',
+    },
+    count: { type: 'number', label: 'Сколько', min: 1, max: 30, step: 1, default: 12 },
+    size: { type: 'number', label: 'Размер', min: 0.3, max: 2.5, step: 0.01, default: 1 },
+    spread: { type: 'number', label: 'Разброс', min: 0.3, max: 1.5, step: 0.01, default: 1 },
+    rounding: { type: 'number', label: 'Скругление кубов', min: 0, max: 0.6, step: 0.01, default: 0.2 },
+    force: { type: 'number', label: 'Сила реакции', min: 0, max: 3, step: 0.01, default: 1 },
+    rotate: { type: 'number', label: 'Вращение', min: 0, max: 3, step: 0.01, default: 1 },
+    floatAmt: { type: 'number', label: 'Покачивание', min: 0, max: 3, step: 0.01, default: 1 },
+    ior: { type: 'number', label: 'Преломление (ior)', min: 1, max: 2.33, step: 0.01, default: 1.45 },
+    thickness: { type: 'number', label: 'Толщина', min: 0, max: 4, step: 0.01, default: 1.2 },
+    roughness: { type: 'number', label: 'Матовость', min: 0, max: 1, step: 0.01, default: 0.06 },
+    dispersion: { type: 'number', label: 'Радуга', min: 0, max: 10, step: 0.1, default: 2 },
+    tint: { type: 'color', label: 'Оттенок стекла', default: '#ffffff' },
+    text: { type: 'text', label: 'Текст за стеклом', default: 'Hello', maxLength: 12 },
+    background: { type: 'color', label: 'Фон', default: '#0b0a1a' },
+    colorA: { type: 'color', label: 'Пятно 1', default: '#7c4dff' },
+    colorB: { type: 'color', label: 'Пятно 2', default: '#ff6b9d' },
+    colorC: { type: 'color', label: 'Пятно 3', default: '#22d3ee' },
+    textColor: { type: 'color', label: 'Цвет текста', default: '#f6f1e7' },
+  },
+  presets: [
+    { name: 'Расступаются', values: { behavior: 'mouse' } },
+    { name: 'Параллакс', values: { behavior: 'scroll', shapes: 'sphere', count: 16 } },
+    { name: 'Попкорн', values: { behavior: 'click', shapes: 'cube', rounding: 0.45, count: 20, size: 0.8 } },
+    { name: 'Матовые кольца', values: { behavior: 'float', shapes: 'ring', roughness: 0.4, count: 8, size: 1.4 } },
+    { name: 'Светлый', values: { background: '#f6f1e7', colorA: '#ffd166', colorB: '#ff8a5c', colorC: '#a78bfa', textColor: '#1d1712' } },
+  ],
+}
+
+export const THREE_EFFECTS = [galaxy, swarm, morph, textParticles, glass, glassShapes]

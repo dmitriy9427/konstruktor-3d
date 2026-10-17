@@ -28,6 +28,8 @@ import galaxySource from '../runtime/three/galaxy.js?raw'
 // oxlint-disable-next-line import/default
 import glassSource from '../runtime/three/glass.js?raw'
 // oxlint-disable-next-line import/default
+import glassShapesSource from '../runtime/three/glass-shapes.js?raw'
+// oxlint-disable-next-line import/default
 import morphSource from '../runtime/three/morph.js?raw'
 // oxlint-disable-next-line import/default
 import swarmSource from '../runtime/three/swarm.js?raw'
@@ -167,6 +169,7 @@ ${
 const SCENE_SOURCES: Record<string, string> = {
   galaxy: galaxySource,
   glass: glassSource,
+  glassShapes: glassShapesSource,
   morph: morphSource,
   swarm: swarmSource,
   textParticles: textParticlesSource,
