@@ -304,3 +304,13 @@ test('«Свой эффект»: правка кода пересобирает 
   await page.getByRole('button', { name: 'Забрать код' }).click()
   await expect(page.getByRole('dialog').locator('code')).toContainText('fragColor = vec4(uTint, 1.0);')
 })
+
+test('текущий пресет подсвечен; сдвинули ползунок — подсветка гаснет', async ({ page }) => {
+  await page.goto('studio.html?e=clouds')
+  const chip = page.locator('.presets .chip', { hasText: 'Закат' })
+  await chip.click()
+  await expect(chip).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.locator('.presets .chip[aria-pressed="true"]')).toHaveCount(1)
+  await page.getByRole('slider', { name: 'Ветер' }).press('ArrowRight')
+  await expect(chip).toHaveAttribute('aria-pressed', 'false')
+})

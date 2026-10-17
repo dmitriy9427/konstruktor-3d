@@ -105,6 +105,12 @@ export function App() {
     setValues(resolveValues(next.params))
   }
 
+  // Текущий пресет — тот, с которым совпадают все значения эффекта.
+  const activePreset = effect.presets?.find((preset) => {
+    const target = resolveValues(effect.params, preset.values)
+    return Object.keys(target).every((key) => target[key] === values[key])
+  })?.name
+
   const closeCode = useCallback(() => setCodeOpen(false), [])
   const [copiedLink, setCopiedLink] = useState(false)
   const shareLink = async () => {
@@ -187,7 +193,13 @@ export function App() {
         {effect.presets && (
           <div className="presets">
             {effect.presets.map((preset) => (
-              <button key={preset.name} type="button" className="chip" onClick={() => setValues(resolveValues(effect.params, preset.values))}>
+              <button
+                key={preset.name}
+                type="button"
+                className="chip"
+                aria-pressed={preset.name === activePreset}
+                onClick={() => setValues(resolveValues(effect.params, preset.values))}
+              >
                 {preset.name}
               </button>
             ))}

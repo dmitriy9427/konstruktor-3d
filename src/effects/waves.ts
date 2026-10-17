@@ -164,7 +164,7 @@ void main() {
   // Дождь рядом с камерой — настоящие капли в симуляции (дальше — формулой, см. картинку).
   for (int i = 0; i < 6; i++) {
     vec2 r = hash2(vec2(uSimStep * 0.137 + float(i) * 17.31, float(i) * 3.7 + uSimStep * 0.071));
-    if (hash(r * 91.7 + uSimStep) < gRain * gRain * 0.3) h -= 0.5 * hit(x, PATCH_MIN + r * PATCH, 0.05);
+    if (hash(r * 91.7 + uSimStep) < gRain * gRain * 0.3) h -= 0.5 * (0.6 + uAmplitude) * hit(x, PATCH_MIN + r * PATCH, 0.05);
   }
   // У края участка вода гасится — круги не отражаются от «стенки».
   float edge = smoothstep(0.0, 0.06, min(min(uv.x, uv.y), min(1.0 - uv.x, 1.0 - uv.y)));
@@ -243,8 +243,9 @@ float liveWater(vec2 x) {
 
 // Круги от дождя по всему морю: сетка ячеек, в каждой — своя капля со своим
 // моментом удара. splash — вспышка в момент удара (видна и вдали, где круги мельче пикселя).
-float rainRipples(vec2 x, float footprint, out float splash) {
+float rainRipples(vec2 x, float footprint, out float splash, out float ring) {
   splash = 0.0;
+  ring = 0.0;
   if (gRain <= 0.0) return 0.0;
   const float CELL = 0.55;
   vec2 base = floor(x / CELL - 0.5);
@@ -261,10 +262,14 @@ float rainRipples(vec2 x, float footprint, out float splash) {
     // Кольцо не больше ~половины ячейки — иначе его обрезали бы края ячейки (квадраты).
     float r = ph * 0.26;
     float k = (1.0 - ph) * (1.0 - ph) * smoothstep(0.3, 0.2, d);
-    h += sin((d - r) * 60.0) * exp(-abs(d - r) * 30.0) * k * smoothstep(0.2, 0.5, 0.12 / footprint);
+    float near = smoothstep(0.2, 0.5, 0.12 / footprint);
+    h += sin((d - r) * 60.0) * exp(-abs(d - r) * 30.0) * k * near;
+    // Светлая кромка круга — видна даже поверх высоких волн (одна рябь по наклону теряется).
+    ring += exp(-abs(d - r) / (0.006 + footprint)) * k * smoothstep(0.05, 0.25, 0.12 / footprint);
     splash += exp(-d / 0.03) * smoothstep(0.2, 0.0, ph) * smoothstep(0.3, 0.15, footprint);
   }
-  return h * 0.05;
+  // Чем выше волны, тем сильнее круги — иначе они теряются на крутых склонах.
+  return h * 0.05 * (0.6 + uAmplitude);
 }
 
 // Вдали, где круги мельче пикселя, капли видны всплесками-искрами. Их считаем
@@ -361,15 +366,17 @@ void main() {
 
   float e = 0.01 + footprint;
   float splash;
+  float ring;
   float dummy;
-  float rr = rainRipples(x, footprint, splash);
+  float dummy2;
+  float rr = rainRipples(x, footprint, splash, ring);
   float h = heightAt(x, t, footprint);
   vec3 n = normalize(vec3(
     heightAt(x - vec2(e, 0.0), t, footprint) - heightAt(x + vec2(e, 0.0), t, footprint)
-      + rr - rainRipples(x + vec2(e, 0.0), footprint, dummy),
+      + rr - rainRipples(x + vec2(e, 0.0), footprint, dummy, dummy2),
     2.0 * e,
     heightAt(x - vec2(0.0, e), t, footprint) - heightAt(x + vec2(0.0, e), t, footprint)
-      + rr - rainRipples(x + vec2(0.0, e), footprint, dummy)));
+      + rr - rainRipples(x + vec2(0.0, e), footprint, dummy, dummy2)));
 
   // Вода: в основном отражённое небо (Френель) — мягко и без резкого контраста.
   vec3 refl = reflect(rd, n);
@@ -383,6 +390,7 @@ void main() {
   col += gSun * spark * uGlitter * 4.0 * smoothstep(-0.15, 0.1, sd.y) * (1.0 - gStorm * 0.8);
   // Всплески капель.
   col += mix(gHor, vec3(1.0), 0.5) * (splash * min(1.0, gRain * 2.0) * 0.7 + farSplashes(p, footprint) * 0.55);
+  col += mix(gHor, vec3(1.0), 0.6) * ring * min(1.0, gRain * 2.0) * 0.35;
 
   // Дымка: вдали вода растворяется в небе у горизонта.
   float fog = 1.0 - exp(-dist * gHaze * 0.045);
