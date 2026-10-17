@@ -50,8 +50,8 @@ vec2 waterAt(vec2 screen01) {
 const vec3 T_TOP[5] = vec3[5](vec3(0.42, 0.44, 0.66), vec3(0.25, 0.53, 0.85), vec3(0.17, 0.11, 0.31), vec3(0.16, 0.19, 0.25), vec3(0.008, 0.016, 0.047));
 const vec3 T_HOR[5] = vec3[5](vec3(1.0, 0.78, 0.6), vec3(0.81, 0.89, 0.95), vec3(1.0, 0.54, 0.36), vec3(0.36, 0.4, 0.46), vec3(0.07, 0.1, 0.2));
 const vec3 T_SUN[5] = vec3[5](vec3(1.0, 0.82, 0.48), vec3(1.0, 0.97, 0.9), vec3(1.0, 0.7, 0.42), vec3(0.67, 0.7, 0.76), vec3(0.87, 0.91, 1.0));
-const vec3 T_DEEP[5] = vec3[5](vec3(0.1, 0.09, 0.15), vec3(0.016, 0.07, 0.12), vec3(0.07, 0.04, 0.11), vec3(0.02, 0.03, 0.05), vec3(0.004, 0.012, 0.035));
-const vec3 T_LIT[5] = vec3[5](vec3(0.44, 0.35, 0.43), vec3(0.12, 0.43, 0.56), vec3(0.36, 0.16, 0.29), vec3(0.15, 0.22, 0.29), vec3(0.05, 0.11, 0.2));
+const vec3 T_DEEP[5] = vec3[5](vec3(0.1, 0.09, 0.15), vec3(0.016, 0.07, 0.12), vec3(0.07, 0.04, 0.11), vec3(0.012, 0.018, 0.03), vec3(0.004, 0.012, 0.035));
+const vec3 T_LIT[5] = vec3[5](vec3(0.44, 0.35, 0.43), vec3(0.12, 0.43, 0.56), vec3(0.36, 0.16, 0.29), vec3(0.42, 0.48, 0.54), vec3(0.05, 0.11, 0.2));
 // Высота солнца — в долях видимого неба: 0 — горизонт, 1 — верх кадра.
 const float T_SUNH[5] = float[5](0.15, 0.85, 0.08, 0.8, 0.55);
 const float T_HAZE[5] = float[5](1.2, 0.5, 0.9, 1.6, 0.7);
@@ -207,7 +207,7 @@ vec3 sky(vec3 d, float disc) {
   float r = 0.018 * uSunSize;
   float vis = (1.0 - gStorm * 0.85) * smoothstep(-0.12, 0.02, sunDir().y);   // в шторм солнце за тучами
   col += gSun * vis * (smoothstep(r, r * 0.75, a) * 3.0 * disc + exp(-a / (0.12 * uSunSize)) * 0.45 + exp(-a / (0.6 * uSunSize)) * 0.15);
-  col += mix(gHor, vec3(0.85, 0.9, 1.0), 0.6) * gFlash * (0.5 + 0.5 * y);
+  col += mix(gHor, vec3(0.85, 0.9, 1.0), 0.6) * gFlash * (0.2 + 0.4 * y);
   return col;
 }
 
@@ -228,9 +228,11 @@ float seaHeight(vec2 x, float t, float footprint, int octaves) {
   vec2 p = x * vec2(1.0 / uStretch, 1.0);     // вытягиваем вдоль горизонта
   float f = uFrequency * 0.06;
   // В шторм море бушует: валы втрое выше и длиннее, гребни острее, бегут быстрее.
-  float amp = 0.55 * uAmplitude * (1.0 + gStorm * 2.4);
-  f *= 1.0 - gStorm * 0.4;
-  float sharp = max(1.0, 4.0 - uChoppy * 2.8 - gStorm * 1.2);
+  // Шторм — не один огромный вал, а много острых гребней разного размера: море «кипит».
+  float amp = 0.55 * uAmplitude * (1.0 + gStorm * 1.3);
+  f *= 1.0 + gStorm * 0.15;
+  // Острота — показатель степени: больше — острее пики и площе впадины. В шторм — сильно больше.
+  float sharp = 1.6 + uChoppy * 3.0 + gStorm * 2.0;
   t *= 1.0 + gStorm * 0.8;
   float h = 0.0;
   for (int i = 0; i < 5; i++) {
@@ -240,7 +242,7 @@ float seaHeight(vec2 x, float t, float footprint, int octaves) {
     h += (swell((p + t) * f, sharp) + swell((p - t) * f, sharp)) * amp * fade;
     p = mat2(1.6, 1.2, -1.2, 1.6) * p;        // поворот ~37° и масштаб ×2
     f *= 1.9;
-    amp *= 0.22;
+    amp *= mix(0.22, 0.34, gStorm);   // в шторм мелкие гребни сильнее
     sharp = mix(sharp, 1.0, 0.2);
   }
   return h;
@@ -368,6 +370,14 @@ void main() {
     vec3 col = sky(rd, 1.0);
     col = mix(col, gHor, exp(-rd.y * 40.0) * min(gHaze, 1.0) * 0.6);
     col = mix(col, gHor * 0.8, gRain * 0.35);     // в дождь небо серее
+    // Тучи: в шторм небо затягивает тяжёлыми тёмными клубами.
+    if (gStorm > 0.0) {
+      // Проекция на «потолок» облаков; у горизонта тучи тают в дымке (иначе полосы).
+      vec2 sp = rd.xz / (rd.y + 0.12) * 0.6 + vec2(uTime * 0.04, 0.0);
+      float cl = fbm(sp + fbm(sp * 0.5 - uTime * 0.02) * 1.5);
+      float fade = smoothstep(0.02, 0.2, rd.y);
+      col = mix(col, gTop * 0.45 + gFlash * 0.4, smoothstep(0.35, 0.75, cl) * gStorm * 0.85 * fade);
+    }
     fragColor = vec4(col + bolt(p) + rainStreaks(p), 1.0);
     return;
   }
@@ -379,7 +389,7 @@ void main() {
   vec3 ro = vec3(0.0, camH(), 0.0);
   float dist = camH() / -rd.y;   // плоскость — запасной вариант
   // Выше самого высокого гребня воды быть не может — с этой высоты и начинаем.
-  float hMax = 2.6 * 0.55 * uAmplitude * (1.0 + gStorm * 2.4) * LIFT;
+  float hMax = 2.6 * 0.55 * uAmplitude * (1.0 + gStorm * 1.3) * LIFT;
   float tt = max(0.0, (camH() - hMax) / -rd.y);
   for (int i = 0; i < 28; i++) {
     vec3 pos = ro + rd * tt;
@@ -412,6 +422,10 @@ void main() {
   float fresnel = clamp(0.04 + 0.96 * pow(1.0 - max(dot(n, -rd), 0.0), 3.0), 0.0, 1.0);
   float lit = max(dot(n, sd), 0.0);
   vec3 water = mix(gDeep, gLit, clamp(0.2 + h * 0.6, 0.0, 1.0)) * (0.55 + 0.45 * lit);
+  // Гребни светлее толщи: свет проходит сквозь тонкую верхушку вала. В шторм это главное —
+  // светлые острые гребни на почти чёрной воде.
+  float crest = smoothstep(0.55, 1.0, h / max(1.1 * uAmplitude * (1.0 + gStorm * 1.3), 0.05));
+  water += gLit * crest * (0.12 + gStorm * 0.45);
   vec3 col = mix(water, sky(refl, 0.2), fresnel * 0.85 + 0.1);
   // Блики солнца на гребнях.
   float spark = pow(max(dot(refl, sd), 0.0), 600.0 / uSunSize);

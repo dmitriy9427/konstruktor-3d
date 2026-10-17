@@ -64,6 +64,7 @@ export const space: EffectDef = {
     galaxyField: { type: 'boolean', label: 'Россыпь далёких галактик', default: true, hint: 'Маленькие галактики разных типов вдали, в случайных местах' },
     galaxies: { type: 'number', label: 'Сколько галактик', min: 0, max: 1, step: 0.01, default: 0.3, hint: 'Плотность россыпи', when: { galaxyField: [true] } },
     galaxySize: { type: 'number', label: 'Размер далёких', min: 0.3, max: 3, step: 0.01, default: 1, hint: 'Размер галактик россыпи', when: { galaxyField: [true] } },
+    galaxySpin: { type: 'number', label: 'Вращение далёких', min: 0, max: 3, step: 0.01, default: 0.3, hint: 'Скорость вращения галактик россыпи; направление у каждой своё. 0 — стоят', when: { galaxyField: [true] } },
     galaxyColor: { type: 'color', label: 'Цвет далёких', default: '#ffd9b0', hint: 'Цвет ядер галактик россыпи (рукава — с оттенком туманности)', when: { galaxyField: [true] } },
     myGalaxies: {
       type: 'list',
@@ -89,7 +90,7 @@ export const space: EffectDef = {
         size: { type: 'number', label: 'Размер', min: 0.2, max: 5, step: 0.01, default: 1.5 },
         tilt: { type: 'number', label: 'Наклон диска', min: 0.1, max: 1, step: 0.01, default: 0.55, hint: '1 — видим плашмя, 0.1 — почти с ребра' },
         angle: { type: 'number', label: 'Поворот, °', min: 0, max: 360, step: 1, default: 20 },
-        spin: { type: 'number', label: 'Вращение', min: -3, max: 3, step: 0.01, default: 0.4, hint: 'Скорость вращения; меньше нуля — в другую сторону' },
+        spin: { type: 'number', label: 'Скорость вращения', min: -5, max: 5, step: 0.01, default: 0.4, hint: 'Скорость вращения этой галактики; меньше нуля — в другую сторону, 0 — стоит' },
         arms: { type: 'number', label: 'Рукава', min: 1, max: 6, step: 1, default: 2 },
         twist: { type: 'number', label: 'Закрутка рукавов', min: 0.5, max: 5, step: 0.01, default: 2.2 },
         bright: { type: 'number', label: 'Яркость', min: 0.2, max: 3, step: 0.01, default: 1.2 },
@@ -259,7 +260,7 @@ vec3 galaxyField(vec2 p) {
   if (h.x > uGalaxies * 0.7) return vec3(0.0);
   vec2 q = (fract(g) - 0.5 - (hash2(id + 7.0) - 0.5) * 0.5) / 2.2;
   float type = floor(hash(id + 5.0) * 4.0);
-  return galaxy(q, (0.03 + h.y * 0.035) * uGalaxySize, 0.25 + h.y * 0.6, hash(id) * 6.28, h.x > 0.3 ? 0.2 : -0.2,
+  return galaxy(q, (0.03 + h.y * 0.035) * uGalaxySize, 0.25 + h.y * 0.6, hash(id) * 6.28, (h.x > 0.3 ? 1.0 : -1.0) * uGalaxySpin * (0.5 + hash(id + 9.0)),
     2.0 + floor(hash(id + 3.0) * 2.0), 2.2, type, uGalaxyColor, 0.5 + h.y);
 }
 
