@@ -40,8 +40,10 @@ for (const effect of EFFECTS) {
     page.on('console', (msg) => msg.type() === 'error' && errors.push(msg.text()))
     page.on('pageerror', (e) => errors.push(e.message))
     // 3D в CI рисует программный рендер (SwiftShader): меньше пикселей и больше времени.
-    if (effect.kind === 'three') test.slow()
-    await page.goto(`studio.html?e=${effect.id}${effect.kind === 'three' ? '&_quality=0.5' : ''}`)
+    // В CI видеокарты нет (SwiftShader): тяжёлые шейдеры — в низком разрешении и с запасом времени.
+    const heavy = effect.kind === 'three' || effect.kind === 'quad' || effect.kind === 'image' || effect.kind === 'slides'
+    if (heavy) test.slow()
+    await page.goto(`studio.html?e=${effect.id}${heavy ? '&_quality=0.5' : ''}`)
     await expect(page.getByRole('heading', { level: 1, name: effect.name }).or(page.locator('.preview--image, .preview--tilt, .preview--transition, .preview--cursor, .preview--ui'))).toBeVisible()
     await expect(page.locator('.preview__error')).toHaveCount(0)
     if (effect.kind === 'transition') {
@@ -233,7 +235,8 @@ test('«Засыпать без действий»: без мыши кадр з�
 })
 
 test('«Волны»: клик по воде — круги (кадр меняется даже без мыши)', async ({ page }) => {
-  await page.goto('studio.html?e=waves&speed=0&rain=0')
+  test.slow()
+  await page.goto('studio.html?e=waves&speed=0&rain=0&_quality=0.5')
   await page.getByRole('switch', { name: 'FPS' }).uncheck()
   const canvas = page.locator('.preview__canvas')
   await page.waitForTimeout(500)
