@@ -948,6 +948,38 @@
   outline: 2px solid var(--accent-2);
 }
 
+.demos {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.demos__item {
+  display: grid;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: none;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.demos__item img {
+  width: 100%;
+  aspect-ratio: 3 / 2;
+  object-fit: cover;
+  border-radius: 6px;
+}
+
+.demos__item[aria-checked='true'] {
+  border-color: var(--accent);
+  color: var(--text);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
 .upload {
   display: block;
   margin-top: 6px;

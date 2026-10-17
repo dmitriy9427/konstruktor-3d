@@ -16,7 +16,14 @@ import { CodeEditor } from './CodeEditor'
 import { CommonControls, inactiveNote, ParamControl, Toggle } from './Controls'
 import { Preview } from './Preview'
 
-const DEMO_IMAGE = `${import.meta.env.BASE_URL}demo/photo.svg`
+/** Готовые картинки для эффектов изображения и слайдов. */
+const DEMOS = [
+  { name: 'Тропики', file: 'tropics.svg' },
+  { name: 'Закат в горах', file: 'photo.svg' },
+  { name: 'Пустыня', file: 'photo-2.svg' },
+  { name: 'Ночной город', file: 'photo-3.svg' },
+].map((d) => ({ ...d, url: `${import.meta.env.BASE_URL}demo/${d.file}` }))
+const DEMO_IMAGE = DEMOS[0].url
 const DRAFT_KEY = 'k3d:custom-code'
 
 /** Код «Своего эффекта»: из ссылки, иначе черновик из браузера, иначе шаблон. */
@@ -272,6 +279,16 @@ export function App() {
           />
         ))}
 
+        {(effect.kind === 'image' || effect.kind === 'css' || effect.kind === 'slides') && (
+          <div className="demos" role="radiogroup" aria-label="Картинка">
+            {DEMOS.map((d) => (
+              <button key={d.file} type="button" role="radio" aria-checked={image === d.url} className="demos__item" onClick={() => setImage(d.url)} title={d.name}>
+                <img src={d.url} alt="" />
+                <span>{d.name}</span>
+              </button>
+            ))}
+          </div>
+        )}
         {(effect.kind === 'image' || effect.kind === 'css' || effect.kind === 'slides') && (
           <label className="upload">
             <input

@@ -32,6 +32,8 @@ export const slides: EffectDef = {
         { value: 'zoom', label: 'Зум' },
         { value: 'glitch', label: 'Глитч' },
         { value: 'ripple', label: 'Волна' },
+        { value: 'displace', label: 'Жидкое смещение' },
+        { value: 'blob', label: 'Капля' },
       ],
       default: 'liquid',
     },
@@ -39,8 +41,8 @@ export const slides: EffectDef = {
     intensity: { type: 'number', label: 'Сила искажения', min: 0, max: 1, step: 0.01, default: 0.5, hint: 'Сила искажения во время перехода' },
     softness: { type: 'number', label: 'Мягкость края', min: 0.01, max: 0.5, step: 0.01, default: 0.15, hint: 'Мягкость границы между старым и новым слайдом' },
     scale: { type: 'number', label: 'Масштаб шума', min: 0.5, max: 8, step: 0.1, default: 3, hint: 'Размер узора шума в переходе' },
-    angle: { type: 'number', when: { mode: ['wipe'] }, label: 'Угол шторки, °', min: 0, max: 360, step: 1, default: 20, hint: 'Направление, с которого идёт шторка' },
-    edge: { type: 'color', when: { mode: ['wipe', 'circle', 'ripple'] }, label: 'Цвет кромки', default: '#ffd27a', hint: 'Цвет светящейся кромки перехода' },
+    angle: { type: 'number', when: { mode: ['wipe', 'displace'] }, label: 'Угол шторки, °', min: 0, max: 360, step: 1, default: 20, hint: 'Направление, с которого идёт шторка' },
+    edge: { type: 'color', when: { mode: ['wipe', 'circle', 'ripple', 'blob'] }, label: 'Цвет кромки', default: '#ffd27a', hint: 'Цвет светящейся кромки перехода' },
     autoplay: { type: 'number', label: 'Автопрокрутка, с', min: 0, max: 10, step: 0.5, default: 0, hint: '0 — только по кнопкам' },
   },
   presets: [
@@ -50,6 +52,8 @@ export const slides: EffectDef = {
     { name: 'Ретро', values: { mode: 'pixels', duration: 0.9 } },
     { name: 'Зум', values: { mode: 'zoom', duration: 1, intensity: 0.8 } },
     { name: 'Глитч', values: { mode: 'glitch', duration: 0.7, intensity: 1 } },
+    { name: 'Жидкое смещение', values: { mode: 'displace', duration: 1.4, intensity: 0.8, scale: 2.5 } },
+    { name: 'Капля', values: { mode: 'blob', duration: 1.3, intensity: 1, softness: 0.08, edge: '#ffffff' } },
     { name: 'Волна', values: { mode: 'ripple', duration: 1.6, intensity: 0.8, softness: 0.1 } },
   ],
   fragment: /* glsl */ `
@@ -118,7 +122,7 @@ void main() {
     col = pick > 0.5
       ? vec3(toAt(q + split).r, toAt(q).g, toAt(q - split).b)
       : vec3(fromAt(q + split).r, fromAt(q).g, fromAt(q - split).b);
-  } else {
+  } else if (uMode < 6.5) {
     // Волна: концентрические волны из центра (или курсора) несут новый слайд.
     vec2 c = mix(vec2(0.5), uMouse, uMouseActive);
     vec2 d = (uv - c) * vec2(aspect, 1.0);
@@ -129,6 +133,27 @@ void main() {
     float m = smoothstep(front + uSoftness * 0.3, front - uSoftness * 0.3, r);
     col = mix(fromAt(uv + off), toAt(uv + off), m);
     col += uEdge * exp(-abs(r - front) * 60.0) * 0.4 * step(0.001, p) * step(p, 0.999);
+  } else if (uMode < 7.5) {
+    // Жидкое смещение: карта смещения из шума; старый слайд «стекает» по ней в
+    // одну сторону, новый «натекает» с другой — как в классических liquid-слайдерах.
+    float n = fbm(uv * uScale + vec2(uTime * 0.05, 0.0));
+    vec2 dir = vec2(cos(radians(uAngle)), sin(radians(uAngle))) * uDirection;
+    float k = uIntensity * 0.6;
+    vec2 a = uv + dir * n * p * k;
+    vec2 b = uv - dir * n * (1.0 - p) * k;
+    col = mix(fromAt(a), toAt(b), smoothstep(0.0, 1.0, p));
+  } else {
+    // Капля: новый слайд растёт каплей с колышущимся краем от курсора (или центра).
+    vec2 c = mix(vec2(0.5), uMouse, uMouseActive);
+    vec2 d = (uv - c) * vec2(aspect, 1.0);
+    float a = atan(d.y, d.x);
+    float wob = (sin(a * 5.0 + uTime * 2.0) * 0.5 + sin(a * 3.0 - uTime * 1.3) * 0.5) * 0.06 * uIntensity * sin(p * 3.14159);
+    float r = p * (length(vec2(aspect, 1.0)) + 0.2) + wob;
+    float m = smoothstep(r + uSoftness * 0.2, r - uSoftness * 0.2, length(d));
+    // Внутри у края — линза: картинка выпячивается.
+    vec2 lens = d * smoothstep(r, r - 0.15, length(d)) * 0.08 * uIntensity * sin(p * 3.14159);
+    col = mix(fromAt(uv), toAt(uv - lens / vec2(aspect, 1.0)), m);
+    col += uEdge * exp(-abs(length(d) - r) * 70.0) * 0.5 * step(0.001, p) * step(p, 0.999);
   }
   fragColor = vec4(col, 1.0);
 }`,

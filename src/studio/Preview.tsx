@@ -276,7 +276,7 @@ function TransitionPreview({ effect, values, drawing, onPick }: Props) {
   )
 }
 
-const SLIDES = ['photo.svg', 'photo-2.svg', 'photo-3.svg'].map((name) => `${import.meta.env.BASE_URL}demo/${name}`)
+const SLIDES = ['tropics.svg', 'photo.svg', 'photo-2.svg', 'photo-3.svg'].map((name) => `${import.meta.env.BASE_URL}demo/${name}`)
 
 /** Превью слайдера: три демо-фото, кнопки и точки. */
 function SlidesPreview({ effect, values, common, image }: Props) {
@@ -289,7 +289,8 @@ function SlidesPreview({ effect, values, common, image }: Props) {
     latest.current = { values, common }
   })
   // Своя картинка встаёт первым слайдом.
-  const images = useMemo(() => (image.startsWith('blob:') ? [image, ...SLIDES.slice(1)] : SLIDES), [image])
+  // Выбранная картинка встаёт первым слайдом, остальные — по порядку.
+  const images = useMemo(() => [image, ...SLIDES.filter((s) => s !== image)].slice(0, 4), [image])
 
   useEffect(() => {
     if (!host.current) return
