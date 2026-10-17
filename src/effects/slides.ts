@@ -29,6 +29,9 @@ export const slides: EffectDef = {
         { value: 'wipe', label: 'Шторка' },
         { value: 'circle', label: 'Круг' },
         { value: 'pixels', label: 'Пиксели' },
+        { value: 'zoom', label: 'Зум' },
+        { value: 'glitch', label: 'Глитч' },
+        { value: 'ripple', label: 'Волна' },
       ],
       default: 'liquid',
     },
@@ -37,7 +40,7 @@ export const slides: EffectDef = {
     softness: { type: 'number', label: 'Мягкость края', min: 0.01, max: 0.5, step: 0.01, default: 0.15, hint: 'Мягкость границы между старым и новым слайдом' },
     scale: { type: 'number', label: 'Масштаб шума', min: 0.5, max: 8, step: 0.1, default: 3, hint: 'Размер узора шума в переходе' },
     angle: { type: 'number', when: { mode: ['wipe'] }, label: 'Угол шторки, °', min: 0, max: 360, step: 1, default: 20, hint: 'Направление, с которого идёт шторка' },
-    edge: { type: 'color', when: { mode: ['wipe', 'circle'] }, label: 'Цвет кромки', default: '#ffd27a', hint: 'Цвет светящейся кромки перехода' },
+    edge: { type: 'color', when: { mode: ['wipe', 'circle', 'ripple'] }, label: 'Цвет кромки', default: '#ffd27a', hint: 'Цвет светящейся кромки перехода' },
     autoplay: { type: 'number', label: 'Автопрокрутка, с', min: 0, max: 10, step: 0.5, default: 0, hint: '0 — только по кнопкам' },
   },
   presets: [
@@ -45,6 +48,9 @@ export const slides: EffectDef = {
     { name: 'Огненная шторка', values: { mode: 'wipe', edge: '#ff7a3d', softness: 0.06, intensity: 0.6, angle: 20 } },
     { name: 'Портал', values: { mode: 'circle', edge: '#22d3ee', softness: 0.05, intensity: 0.8 } },
     { name: 'Ретро', values: { mode: 'pixels', duration: 0.9 } },
+    { name: 'Зум', values: { mode: 'zoom', duration: 1, intensity: 0.8 } },
+    { name: 'Глитч', values: { mode: 'glitch', duration: 0.7, intensity: 1 } },
+    { name: 'Волна', values: { mode: 'ripple', duration: 1.6, intensity: 0.8, softness: 0.1 } },
   ],
   fragment: /* glsl */ `
 void main() {
@@ -82,7 +88,7 @@ void main() {
     vec2 push = normalize(uv - c + 1e-5) * exp(-abs(d - r) * 12.0) * uIntensity * 0.05;
     col = mix(fromAt(uv + push), toAt(uv), m);
     col += uEdge * exp(-abs(d - r) * 60.0) * step(0.001, p) * step(p, 0.999);
-  } else {
+  } else if (uMode < 3.5) {
     // Пиксели: размер клетки растёт к середине перехода и снова падает.
     float cells = mix(200.0, 12.0, sin(p * 3.14159));
     vec2 grid = vec2(cells * aspect, cells);
@@ -90,6 +96,39 @@ void main() {
     vec2 q = mix(uv, (floor(uv * grid) + 0.5) / grid, step(0.001, p) * step(p, 0.999));
     float m = smoothstep(0.35, 0.65, p + (hash(floor(uv * grid)) - 0.5) * 0.3);
     col = mix(fromAt(q), toAt(q), m);
+  } else if (uMode < 4.5) {
+    // Зум: старый слайд улетает на нас с размытием, новый выезжает из глубины.
+    vec2 c = uv - 0.5;
+    vec3 a = vec3(0.0), b = vec3(0.0);
+    float blur = sin(p * 3.14159) * uIntensity * 0.08;
+    for (int i = 0; i < 8; i++) {
+      float k = float(i) / 7.0;
+      a += fromAt(0.5 + c / (1.0 + p * 0.6 + blur * k));
+      b += toAt(0.5 + c * (1.0 + (1.0 - p) * 0.5) / (1.0 + blur * k));
+    }
+    col = mix(a / 8.0, b / 8.0, smoothstep(0.3, 0.7, p));
+  } else if (uMode < 5.5) {
+    // Глитч: полосы сдвигаются рывками, каналы расходятся, кадр переключается неровно.
+    float power = sin(p * 3.14159) * uIntensity;
+    float row = floor(uv.y * mix(8.0, 40.0, hash(vec2(floor(p * 12.0), 3.0))));
+    float shift = (hash(vec2(row, floor(p * 18.0))) - 0.5) * 0.25 * power * step(0.5, hash(vec2(row, 7.0 + floor(p * 9.0))));
+    vec2 q = uv + vec2(shift, 0.0);
+    float pick = step(hash(vec2(row, floor(p * 10.0))) * 0.6 + 0.2, p);
+    vec2 split = vec2(0.012 * power, 0.0);
+    col = pick > 0.5
+      ? vec3(toAt(q + split).r, toAt(q).g, toAt(q - split).b)
+      : vec3(fromAt(q + split).r, fromAt(q).g, fromAt(q - split).b);
+  } else {
+    // Волна: концентрические волны из центра (или курсора) несут новый слайд.
+    vec2 c = mix(vec2(0.5), uMouse, uMouseActive);
+    vec2 d = (uv - c) * vec2(aspect, 1.0);
+    float r = length(d);
+    float front = p * 1.6;
+    float wave = sin((r - front) * 45.0) * exp(-abs(r - front) * 6.0) * uIntensity * 0.07;
+    vec2 off = normalize(d + 1e-5) * wave / vec2(aspect, 1.0);
+    float m = smoothstep(front + uSoftness * 0.3, front - uSoftness * 0.3, r);
+    col = mix(fromAt(uv + off), toAt(uv + off), m);
+    col += uEdge * exp(-abs(r - front) * 60.0) * 0.4 * step(0.001, p) * step(p, 0.999);
   }
   fragColor = vec4(col, 1.0);
 }`,
