@@ -5,6 +5,7 @@
 import { aurora } from './aurora'
 import { cells } from './cells'
 import { gradient } from './gradient'
+import { fire, liquidMetal } from './liquid-fire'
 import { CURSORS } from './cursors'
 import { UI_EFFECTS } from './ui'
 import { clouds } from './clouds'
@@ -27,7 +28,7 @@ import { waves } from './waves'
 /** «Свой эффект» в каталоге — с кодом шаблона; настоящий код Студия подставляет сама. */
 export const CUSTOM = makeCustomEffect(TEMPLATES[1].code)
 
-export const EFFECTS: EffectDef[] = [CUSTOM, gradient, noise, lava, cells, waves, clouds, space, aurora, plasma, imageDistort, imageLiquid, imageReveal, imageMask, imageFlow, burn, dissolve, curtain, melt, slides, galaxy, swarm, morph, textParticles, glass, ...CURSORS, ...UI_EFFECTS, tilt]
+export const EFFECTS: EffectDef[] = [CUSTOM, gradient, noise, lava, cells, liquidMetal, fire, waves, clouds, space, aurora, plasma, imageDistort, imageLiquid, imageReveal, imageMask, imageFlow, burn, dissolve, curtain, melt, slides, galaxy, swarm, morph, textParticles, glass, ...CURSORS, ...UI_EFFECTS, tilt]
 
 export const CATEGORIES: Category[] = ['Свой эффект', 'Фоны', 'Изображения', 'Переходы', '3D', 'Курсоры', 'Интерфейс', 'Без WebGL']
 
