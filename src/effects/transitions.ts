@@ -29,21 +29,47 @@ const pattern = (value: string): SelectParam => ({
     { value: 'up', label: 'Снизу' },
     { value: 'down', label: 'Сверху' },
     { value: 'center', label: 'Центр' },
+    { value: 'custom', label: 'Свои очаги' },
   ],
   default: value,
 })
 
-function params(d: { pattern: string; points: number; scale: number; roughness: number; edge: number; glow: number; char: number; ash: number; hot: string; ember: string; soot: string }): Params {
+function params(d: {
+  pattern: string
+  points: number
+  scale: number
+  roughness: number
+  edge: number
+  glow: number
+  char: number
+  ash: number
+  hot: string
+  ember: string
+  soot: string
+  flames?: number
+  drips?: number
+}): Params {
   return {
     trigger: trigger(),
     pattern: pattern(d.pattern),
     points: { type: 'number', when: { pattern: ['points'] }, label: 'Очагов', min: 1, max: 12, step: 1, default: d.points, hint: 'Сколько очагов, из которых растёт прогорание' },
+    origins: {
+      type: 'points',
+      label: 'Свои очаги',
+      default: '0.25,0.7,0;0.7,0.35,0',
+      max: 12,
+      enable: { pattern: 'custom' },
+      when: { pattern: ['custom'] },
+      hint: 'Нажмите «Рисовать» и кликайте по превью — оттуда начнёт гореть',
+    },
     scale: { type: 'number', label: 'Масштаб шума', min: 0.5, max: 10, step: 0.1, default: d.scale, hint: 'Размер узора прогорания: больше значение — мельче' },
     roughness: { type: 'number', label: 'Рваность края', min: 0, max: 1, step: 0.01, default: d.roughness, hint: 'Рваность края: 0 — ровный, 1 — сильно изъеден' },
     edge: { type: 'number', label: 'Ширина края', min: 0, max: 0.12, step: 0.002, default: d.edge, hint: 'Ширина светящейся кромки на границе прогорания' },
     glow: { type: 'number', label: 'Свечение', min: 0, max: 2, step: 0.01, default: d.glow, hint: 'Сила свечения кромки' },
     char: { type: 'number', label: 'Копоть', min: 0, max: 1, step: 0.01, default: d.char, hint: 'Насколько край темнеет от копоти' },
     ash: { type: 'number', label: 'Пепел', min: 0, max: 1.5, step: 0.01, default: d.ash, hint: 'Сколько пепла летит над краем' },
+    flames: { type: 'number', label: 'Языки пламени', min: 0, max: 2, step: 0.01, default: d.flames ?? 0, hint: 'Огонь поднимается от горящего края в открывшуюся дыру' },
+    drips: { type: 'number', label: 'Жидкий край', min: 0, max: 2, step: 0.01, default: d.drips ?? 0, hint: 'Глянцевая кромка и потёки вниз — секция тает, а не горит' },
     duration: { type: 'number', when: { trigger: ['appear', 'manual'] }, label: 'Длительность, с', min: 0.3, max: 6, step: 0.1, default: 1.8, hint: 'Для «Появления» и «Из кода»' },
     seed: { type: 'number', label: 'Вариант узора', min: 1, max: 99, step: 1, default: 7, hint: 'Номер варианта узора: разные числа дают разные рисунки прогорания' },
     hot: { type: 'color', label: 'Жар', default: d.hot, hint: 'Цвет самой горячей части кромки' },
@@ -62,6 +88,7 @@ export const burn: EffectDef = {
   presets: [
     { name: 'Бумага', values: { pattern: 'points', points: 5, hot: '#fff1a8', ember: '#ff5a1f', soot: '#1a0c05' } },
     { name: 'Синее пламя', values: { hot: '#e8fbff', ember: '#2f7bff', soot: '#05081a', glow: 1.2, ash: 0.4 } },
+    { name: 'Пламя', values: { pattern: 'up', flames: 1.4, edge: 0.04, glow: 1.2, ash: 0.9, scale: 3.5, roughness: 0.5 } },
     { name: 'Пожар', values: { pattern: 'up', roughness: 0.6, edge: 0.06, glow: 1.4, ash: 1.2, scale: 4 } },
   ],
 }
@@ -91,5 +118,19 @@ export const curtain: EffectDef = {
     { name: 'Снизу', values: { pattern: 'up' } },
     { name: 'Из центра', values: { pattern: 'center', ember: '#22d3ee' } },
     { name: 'Сверху', values: { pattern: 'down', ember: '#a78bfa' } },
+  ],
+}
+
+export const melt: EffectDef = {
+  id: 'melt',
+  name: 'Таяние',
+  category: 'Переходы',
+  kind: 'transition',
+  description: 'Секция тает сверху: глянцевый край и потёки вниз',
+  params: params({ pattern: 'down', points: 3, scale: 2.2, roughness: 0.3, edge: 0.03, glow: 0.3, char: 0, ash: 0, hot: '#ffffff', ember: '#a78bfa', soot: '#000000', drips: 1.2 }),
+  presets: [
+    { name: 'Глазурь', values: { ember: '#a78bfa', hot: '#ffffff', drips: 1.2 } },
+    { name: 'Шоколад', values: { ember: '#5b3418', hot: '#d9a77a', drips: 1.6, edge: 0.04 } },
+    { name: 'Краска', values: { ember: '#ff4fa3', hot: '#ffd1e8', drips: 2, pattern: 'down', roughness: 0.15 } },
   ],
 }

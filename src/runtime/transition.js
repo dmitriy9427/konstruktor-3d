@@ -78,7 +78,14 @@ export function buildField(width, height, v) {
   const random = makeRandom(v.seed)
   const aspect = width / height
   const count = Math.max(1, Math.round(v.points))
-  const centers = Array.from({ length: count }, () => [0.1 + random() * 0.8, 0.1 + random() * 0.8])
+  // Свои очаги (pattern: 'custom') — точки «x,y;…» в долях секции (y вверх).
+  const custom = String(v.origins ?? '')
+    .split(';')
+    .map((p) => p.split(',').map(Number))
+    .filter((p) => p.length >= 2 && p.every(Number.isFinite))
+    .map(([x, y]) => [x, 1 - y])
+  const centers =
+    v.pattern === 'custom' && custom.length ? custom : Array.from({ length: count }, () => [0.1 + random() * 0.8, 0.1 + random() * 0.8])
   const raw = new Float32Array(width * height)
   const rough = v.roughness
   for (let y = 0; y < height; y++) {
@@ -154,8 +161,16 @@ uniform float uTime;
 uniform vec3 uHot;
 uniform vec3 uEmber;
 uniform vec3 uSoot;
+uniform float uFlames;   // языки пламени над краем
+uniform float uDrips;    // жидкий край: глянцевая кромка и потёки вниз
+uniform vec2 uPx;        // размер пикселя в долях секции
 out vec4 fragColor;
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float noise(vec2 p) {
+  vec2 i = floor(p), f = fract(p);
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);
+}
 void main() {
   vec2 uv = (gl_FragCoord.xy - uRect.xy) / uRect.zw;
   if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) discard;
@@ -177,6 +192,43 @@ void main() {
   // В сторону дыры гаснет вдвое быстрее — открывшаяся секция остаётся чистой.
   float glow = exp(-(d < 0.0 ? -d * 2.2 : d) / (e * 1.6 + 0.004)) * uGlow * 0.5;
   col.rgb += uEmber * glow * flicker;
+
+  // Пламя: в дыре над горящим краем. Ищем край ниже по экрану (до 8 шагов) —
+  // чем ближе, тем выше язык; языки рвёт шум, бегущий вверх.
+  if (uFlames > 0.0 && d < 0.0) {
+    float fl = 0.0;
+    for (int k = 1; k <= 8; k++) {
+      float below = texture(uField, vec2(uv.x, 1.0 - (uv.y - float(k) * uPx.y * 6.0))).r - uT;
+      if (below > 0.0 && below < e * 2.0) { fl = 1.0 - float(k) / 9.0; break; }
+    }
+    float tongues = noise(vec2(uv.x * 40.0, uv.y * 14.0 - uTime * 5.0)) * noise(vec2(uv.x * 13.0 + 3.0, uv.y * 5.0 - uTime * 2.5));
+    float flame = smoothstep(0.1, 0.6, fl * tongues * 2.2) * uFlames;
+    vec3 fc = mix(uEmber, uHot, smoothstep(0.3, 0.9, fl));
+    col.rgb += fc * flame;
+    col.a = max(col.a, flame * 0.9);
+  }
+  // Жидкий край: глянцевая полоса вдоль края и потёки вниз в дыру.
+  if (uDrips > 0.0) {
+    float rim = smoothstep(-aa, aa, d) * (1.0 - smoothstep(e * 0.6, e * 0.6 + aa, d));
+    float gloss = smoothstep(e * 0.45, e * 0.1, abs(d - e * 0.3));
+    vec3 liquid = mix(uEmber, uHot, gloss * 0.8);
+    col = mix(col, vec4(liquid, 1.0), rim * uDrips);
+    if (d < 0.0) {
+      // Потёк: в «колонке» с каплей ищем край выше — тянется вниз на длину капли.
+      float colId = floor(uv.x / (uPx.x * 7.0));
+      float len = (0.02 + 0.08 * hash(vec2(colId, 2.0))) * uDrips * step(0.55, hash(vec2(colId, 9.0)));
+      for (int k = 1; k <= 10; k++) {
+        float off = float(k) / 10.0 * len;
+        float above = texture(uField, vec2(uv.x, 1.0 - (uv.y + off))).r - uT;
+        if (above > 0.0) {
+          float w = 1.0 - smoothstep(0.25, 0.5, abs(fract(uv.x / (uPx.x * 7.0)) - 0.5));
+          float tip = smoothstep(len, len * 0.6, off);
+          col = mix(col, vec4(liquid, 1.0), w * (0.6 + 0.4 * tip));
+          break;
+        }
+      }
+    }
+  }
   fragColor = col;
 }`
 
@@ -268,7 +320,7 @@ export function createTransition(el, values = {}, options = {}) {
   // кадре перехода; нет WebGL2 — переход работает без огня.
   const PAD = 80
   const fx = { canvas: null, gl: null, ember: null, ash: null, buffer: null, ashBuffer: null, failed: false }
-  const wantsFx = !reduced && (edge > 0 || v.glow > 0 || v.char > 0 || v.ash > 0)
+  const wantsFx = !reduced && (edge > 0 || v.glow > 0 || v.char > 0 || v.ash > 0 || v.flames > 0 || v.drips > 0)
   const ensureFx = () => {
     if (fx.gl || fx.failed || !wantsFx) return Boolean(fx.gl)
     const canvas = document.createElement('canvas')
@@ -300,8 +352,16 @@ export function createTransition(el, values = {}, options = {}) {
       const loc = new Map()
       return { p, u: (name) => (loc.has(name) ? loc.get(name) : loc.set(name, gl.getUniformLocation(p, name)).get(name)) }
     }
-    fx.ember = program(EMBER_VERTEX, EMBER_FRAGMENT)
-    fx.ash = program(ASH_VERTEX, ASH_FRAGMENT)
+    try {
+      fx.ember = program(EMBER_VERTEX, EMBER_FRAGMENT)
+      fx.ash = program(ASH_VERTEX, ASH_FRAGMENT)
+    } catch (error) {
+      // Огонь не собрался — переход работает без него (дыры режет SVG-фильтр).
+      console.warn('[3D-конструктор]', error)
+      fx.failed = true
+      canvas.remove()
+      return false
+    }
     fx.buffer = gl.createBuffer()
     gl.bindBuffer(gl.ARRAY_BUFFER, fx.buffer)
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW)
@@ -383,7 +443,7 @@ export function createTransition(el, values = {}, options = {}) {
     gl.enable(gl.BLEND)
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA)
     let draws = 0
-    if (active && (edge > 0 || v.glow > 0 || v.char > 0)) {
+    if (active && (edge > 0 || v.glow > 0 || v.char > 0 || v.flames > 0 || v.drips > 0)) {
       const { p, u } = fx.ember
       gl.useProgram(p)
       gl.bindBuffer(gl.ARRAY_BUFFER, fx.buffer)
@@ -401,6 +461,9 @@ export function createTransition(el, values = {}, options = {}) {
       gl.uniform3f(u('uHot'), ...hotRgb)
       gl.uniform3f(u('uEmber'), ...emberRgb)
       gl.uniform3f(u('uSoot'), ...sootRgb)
+      gl.uniform1f(u('uFlames'), v.flames ?? 0)
+      gl.uniform1f(u('uDrips'), v.drips ?? 0)
+      gl.uniform2f(u('uPx'), 1 / Math.max(1, r.width), 1 / Math.max(1, r.height))
       gl.drawArrays(gl.TRIANGLES, 0, 3)
       draws++
     }
@@ -618,6 +681,9 @@ export const DEFAULTS = {
   trigger: 'scroll',
   duration: 1.8,
   threshold: 0.5,
+  flames: 0,
+  drips: 0,
+  origins: '',
 }
 
 /** '#ff8800' → [1, 0.53, 0] (для uniform). */

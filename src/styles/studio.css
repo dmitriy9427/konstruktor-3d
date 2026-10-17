@@ -68,6 +68,12 @@
   fill: #fff;
 }
 
+.draw-layer__path .draw-layer__origin {
+  fill: #ff7a3d;
+  stroke: #fff;
+  stroke-width: 0.004;
+}
+
 .list__tabs {
   flex-wrap: wrap;
   margin-top: 6px;

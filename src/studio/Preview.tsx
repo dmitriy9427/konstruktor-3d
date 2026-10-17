@@ -33,7 +33,7 @@ type Props = {
 }
 
 /** Прозрачный слой поверх превью: ловит клики, пока рисуют точки (и показывает путь). */
-function DrawLayer({ onPick, path }: { onPick?: (x: number, y: number) => void; path?: [number, number][] }) {
+function DrawLayer({ onPick, path, dots }: { onPick?: (x: number, y: number) => void; path?: [number, number][]; dots?: [number, number][] }) {
   return (
     <div
       className="draw-layer"
@@ -44,6 +44,13 @@ function DrawLayer({ onPick, path }: { onPick?: (x: number, y: number) => void; 
         onPick?.((e.clientX - r.left) / r.width, 1 - (e.clientY - r.top) / r.height)
       }}
     >
+      {dots && dots.length > 0 && (
+        <svg className="draw-layer__path" viewBox="0 0 1 1" preserveAspectRatio="none" aria-hidden="true">
+          {dots.map(([x, y], i) => (
+            <circle key={i} cx={x} cy={1 - y} r={0.012} className="draw-layer__origin" />
+          ))}
+        </svg>
+      )}
       {path && path.length > 0 && (
         <svg className="draw-layer__path" viewBox="0 0 1 1" preserveAspectRatio="none" aria-hidden="true">
           <polyline points={path.map(([x, y]) => `${x},${1 - y}`).join(' ')} vectorEffect="non-scaling-stroke" />
@@ -197,7 +204,7 @@ function TiltPreview({ values, image }: Props) {
  * Переход пересоздаётся при каждом изменении параметров (поле времени
  * зависит от них); прогресс для «Появления» и «Из кода» сохраняем.
  */
-function TransitionPreview({ effect, values }: Props) {
+function TransitionPreview({ effect, values, drawing, onPick }: Props) {
   const scroller = useRef<HTMLDivElement>(null)
   const cover = useRef<HTMLElement>(null)
   const instance = useRef<TransitionInstance | null>(null)
@@ -246,6 +253,15 @@ function TransitionPreview({ effect, values }: Props) {
         </div>
         {scrollable && <div className="demo__outro">Конец страницы</div>}
       </div>
+      {drawing && (
+        <DrawLayer
+          onPick={onPick}
+          dots={String(values.origins ?? '')
+            .split(';')
+            .filter(Boolean)
+            .map((p) => p.split(',').map(Number).slice(0, 2) as [number, number])}
+        />
+      )}
       {!scrollable && (
         <div className="demo__controls">
           <button type="button" className="button button--primary" onClick={() => instance.current?.play()}>
