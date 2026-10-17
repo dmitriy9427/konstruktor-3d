@@ -327,6 +327,35 @@ function makeHelpers(THREE) {
       const distance = camera.position.length()
       return 2 * distance * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * camera.aspect
     },
+    /**
+     * Нарисовать картинку (логотип) по центру холста, вписав с полями (для samplePixels).
+     * Точки берутся там, где картинка непрозрачная; у картинки без прозрачности —
+     * где она темнее фона (по яркости), чтобы подходили и чёрные логотипы на белом.
+     */
+    drawImage(img) {
+      return (g, size) => {
+        const k = Math.min((size * 0.9) / img.naturalWidth, (size * 0.9) / img.naturalHeight)
+        const w = img.naturalWidth * k
+        const h = img.naturalHeight * k
+        g.drawImage(img, (size - w) / 2, (size - h) / 2, w, h)
+        const data = g.getImageData(0, 0, size, size)
+        const d = data.data
+        let opaque = 0
+        for (let i = 3; i < d.length; i += 4) if (d[i] > 250) opaque++
+        // Почти всё непрозрачно — значит, у логотипа фон: превращаем яркость в прозрачность.
+        if (opaque > d.length / 4 * 0.6) {
+          for (let i = 0; i < d.length; i += 4) d[i + 3] = 255 - (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114)
+          g.putImageData(data, 0, 0)
+        }
+      }
+    },
+    /** Загрузить картинку и вызвать done(img), когда загрузится. */
+    loadImage(url, done) {
+      const img = new Image()
+      img.crossOrigin = 'anonymous'
+      img.onload = () => done(img)
+      img.src = url
+    },
     /** Нарисовать текст по центру холста (для samplePixels). */
     drawText(text, weight = 800) {
       return (g, size) => {

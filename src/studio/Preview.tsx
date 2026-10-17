@@ -350,14 +350,14 @@ function SlidesPreview({ effect, values, common, image }: Props) {
  * Превью 3D: three.js (≈ 170 КБ gzip) скачивается, только когда выбран
  * 3D-эффект, — остальная Студия его не грузит. Пока грузится — подпись.
  */
-function ScenePreview({ effect, values, common, drawing, onPick, path }: Props) {
+function ScenePreview({ effect, values, common, image, drawing, onPick, path }: Props) {
   const host = useRef<HTMLDivElement>(null)
   const instance = useRef<SceneInstance | null>(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
-  const latest = useRef({ values, common })
+  const latest = useRef({ values, common, image })
   useLayoutEffect(() => {
-    latest.current = { values, common }
+    latest.current = { values, common, image }
   })
 
   useEffect(() => {
@@ -375,7 +375,7 @@ function ScenePreview({ effect, values, common, drawing, onPick, path }: Props) 
       host.current.append(canvas)
       try {
         const { values: v, common: c } = latest.current
-        instance.current = createScene(THREE, canvas, effect.setup!, { name: effect.name, values: v }, {
+        instance.current = createScene(THREE, canvas, effect.setup!, { name: effect.name, values: { ...v, logo: latest.current.image } }, {
           ...runtimeOptions(c),
           reducedMotion: false,
           addons: room ? { RoomEnvironment: room.RoomEnvironment } : {},
@@ -393,7 +393,7 @@ function ScenePreview({ effect, values, common, drawing, onPick, path }: Props) 
     }
   }, [effect])
 
-  useEffect(() => instance.current?.set(values), [values])
+  useEffect(() => instance.current?.set({ ...values, logo: image }), [values, image])
   useEffect(() => instance.current?.setOptions(runtimeOptions(common)), [common])
 
   return (

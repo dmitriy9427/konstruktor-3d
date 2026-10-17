@@ -199,7 +199,7 @@ ${sceneSource.trim()}
 
 ${SCENE_SOURCES[effect.setupName!].trim()}
 
-const VALUES = ${json(values)}
+const VALUES = ${json(values.source === 'image' ? { ...values, logo: './logo.svg' } : values)}${values.source === 'image' ? '   // logo — путь к вашему логотипу (PNG/SVG с прозрачным фоном)' : ''}
 
 const OPTIONS = ${json(runtimeOptions(common))}
 

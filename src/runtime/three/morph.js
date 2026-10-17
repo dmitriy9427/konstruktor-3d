@@ -77,8 +77,23 @@ export function morph({ THREE, scene, camera, renderer, values, helpers }) {
 
   let points = null
   let built = ''
+  // Логотип из картинки: грузится асинхронно — пока не загрузился, показываем текст.
+  let logoImg = null
+  let logoUrl = ''
+  const loadLogo = () => {
+    if (values.source !== 'image' || !values.logo || values.logo === logoUrl) return
+    logoUrl = values.logo
+    const url = values.logo
+    helpers.loadImage(url, (img) => {
+      // Пока грузилась, могли выбрать другую картинку — берём только последнюю.
+      if (url !== logoUrl) return
+      logoImg = img
+      build()
+    })
+  }
   const build = () => {
-    const key = [values.text, values.shape, values.count, values.weight, values.shapeSize, values.wave, values.depth].join('|')
+    loadLogo()
+    const key = [values.source, values.logo, logoImg?.src ?? '', values.text, values.shape, values.count, values.weight, values.shapeSize, values.wave, values.depth].join('|')
     if (key === built) return
     built = key
     if (points) {
@@ -86,7 +101,8 @@ export function morph({ THREE, scene, camera, renderer, values, helpers }) {
       points.geometry.dispose()
     }
     const count = Math.round(values.count)
-    const from = helpers.samplePixels(helpers.drawText(String(values.text || '3D'), values.weight), count, 4.2)
+    const draw = values.source === 'image' && logoImg ? helpers.drawImage(logoImg) : helpers.drawText(String(values.text || '3D'), values.weight)
+    const from = helpers.samplePixels(draw, count, values.source === 'image' && logoImg ? 3 : 4.2)
     const to = helpers.shape(values.shape, count, values.shapeSize)
     // Толщина логотипа: частицы выдвигаются по z (у плоского текста почти нет объёма).
     for (let i = 0; i < count; i++) from[i * 3 + 2] = (Math.random() - 0.5) * values.depth

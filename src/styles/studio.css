@@ -950,7 +950,7 @@
 
 .demos {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 6px;
   margin-top: 10px;
 }
@@ -969,6 +969,7 @@
 
 .demos__item img {
   width: 100%;
+  background: #f6f1e7;
   aspect-ratio: 3 / 2;
   object-fit: cover;
   border-radius: 6px;

@@ -86,8 +86,22 @@ export function textParticles({ THREE, scene, camera, renderer, values, helpers 
 
   let points = null
   let built = ''
+  let logoImg = null
+  let logoUrl = ''
+  const loadLogo = () => {
+    if (values.source !== 'image' || !values.logo || values.logo === logoUrl) return
+    logoUrl = values.logo
+    const url = values.logo
+    helpers.loadImage(url, (img) => {
+      // Пока грузилась, могли выбрать другую картинку — берём только последнюю.
+      if (url !== logoUrl) return
+      logoImg = img
+      build()
+    })
+  }
   const build = () => {
-    const key = [values.text, values.count, values.weight, values.depth].join('|')
+    loadLogo()
+    const key = [values.source, values.logo, logoImg?.src ?? '', values.text, values.count, values.weight, values.depth].join('|')
     if (key === built) return
     built = key
     if (points) {
@@ -95,7 +109,8 @@ export function textParticles({ THREE, scene, camera, renderer, values, helpers 
       points.geometry.dispose()
     }
     const count = Math.round(values.count)
-    const positions = helpers.samplePixels(helpers.drawText(String(values.text || 'Привет'), values.weight), count, 5)
+    const draw = values.source === 'image' && logoImg ? helpers.drawImage(logoImg) : helpers.drawText(String(values.text || 'Привет'), values.weight)
+    const positions = helpers.samplePixels(draw, count, values.source === 'image' && logoImg ? 3.4 : 5)
     // Объём текста: разброс точек по z.
     for (let i = 0; i < count; i++) positions[i * 3 + 2] = (Math.random() - 0.5) * values.depth
     const dirs = new Float32Array(count * 4)

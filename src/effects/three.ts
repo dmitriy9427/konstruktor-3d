@@ -126,7 +126,17 @@ export const morph: EffectDef = {
   setup: morphSetup,
   setupName: 'morph',
   params: {
-    text: { type: 'text', label: 'Логотип (текст)', default: 'K3D', maxLength: 12, hint: 'Короткая надпись, из частиц которой собран логотип' },
+    source: {
+      type: 'select',
+      label: 'Из чего',
+      hint: 'Текст — из поля ниже. Картинка — из выбранной или загруженной картинки (лучше PNG или SVG с прозрачным фоном)',
+      options: [
+        { value: 'text', label: 'Текст' },
+        { value: 'image', label: 'Картинка' },
+      ],
+      default: 'text',
+    },
+    text: { type: 'text', label: 'Логотип (текст)', default: 'K3D', maxLength: 12, hint: 'Короткая надпись, из частиц которой собран логотип', when: { source: ['text'] } },
     shape: {
       type: 'select',
       label: 'Во что превращается',
@@ -188,7 +198,17 @@ export const textParticles: EffectDef = {
   setup: textSetup,
   setupName: 'textParticles',
   params: {
-    text: { type: 'text', label: 'Текст', default: 'Привет', maxLength: 16 },
+    source: {
+      type: 'select',
+      label: 'Из чего',
+      hint: 'Текст — из поля ниже. Картинка — из выбранной или загруженной картинки (лучше PNG или SVG с прозрачным фоном)',
+      options: [
+        { value: 'text', label: 'Текст' },
+        { value: 'image', label: 'Картинка' },
+      ],
+      default: 'text',
+    },
+    text: { type: 'text', label: 'Текст', default: 'Привет', maxLength: 16, when: { source: ['text'] } },
     trigger: trigger('auto', 'Курсор расталкивает точки всегда; из кода: effect.progress(1)'),
     period: { type: 'number', label: 'Период «само», с', min: 1, max: 12, step: 0.5, default: 5, when: { trigger: ['auto'] } },
     scatter: { type: 'number', label: 'Сила рассыпания', min: 0, max: 1.5, step: 0.01, default: 1, hint: 'Насколько сильно рассыпается текст' },
