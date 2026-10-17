@@ -12,6 +12,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { EffectDef } from '../effects/types'
 import { runtimeOptions, type Common } from '../engine/params'
 import { createEffect, type EffectInstance, type Values } from '../runtime/runtime'
+import { createCursor, type CursorInstance } from '../runtime/cursor'
 import type { SceneInstance } from '../runtime/scene'
 import { createTilt, type TiltInstance } from '../runtime/tilt'
 import { createTransition, type TransitionInstance, type TransitionTrigger } from '../runtime/transition'
@@ -59,6 +60,7 @@ export function Preview(props: Props) {
   if (props.effect.kind === 'transition') return <TransitionPreview {...props} />
   if (props.effect.kind === 'slides') return <SlidesPreview key={props.effect.id} {...props} />
   if (props.effect.kind === 'three') return <ScenePreview key={props.effect.id} {...props} />
+  if (props.effect.kind === 'cursor' || props.effect.overlay) return <CursorPreview key={props.effect.id} {...props} />
   // Режим «по прокрутке» — мини-страница, которую можно листать (своя разметка → свой key).
   const scroll = props.values.cycle === 'scroll'
   return <ShaderPreview key={props.effect.id + (scroll ? '-scroll' : '')} {...props} scroll={scroll} />
@@ -374,6 +376,80 @@ function ScenePreview({ effect, values, common, drawing, onPick, path }: Props) 
     <div ref={host} className="preview" role="img" aria-label={`Превью: ${effect.name}`}>
       {loading && <p className="preview__loading">Загружаю three.js…</p>}
       {drawing && <DrawLayer onPick={onPick} path={path} />}
+      {error && <p className="preview__error">{error}</p>}
+    </div>
+  )
+}
+
+/**
+ * Превью курсора: демо-страница (заголовок, текст, кнопки, карточки), а курсор
+ * работает только внутри неё. Шейдерные курсоры — прозрачный холст поверх
+ * страницы; лёгкие — слой из cursor.js.
+ */
+function CursorPreview({ effect, values, common }: Props) {
+  const page = useRef<HTMLDivElement>(null)
+  const instance = useRef<EffectInstance | CursorInstance | null>(null)
+  const [error, setError] = useState('')
+  const latest = useRef({ values, common })
+  useLayoutEffect(() => {
+    latest.current = { values, common }
+  })
+
+  useEffect(() => {
+    const host = page.current
+    if (!host) return
+    const { values: v, common: c } = latest.current
+    let canvas: HTMLCanvasElement | null = null
+    try {
+      if (effect.kind === 'cursor') {
+        instance.current = createCursor(host, { ...v, type: effect.id.replace('cursor-', ''), name: effect.name })
+      } else {
+        canvas = document.createElement('canvas')
+        canvas.className = 'cursor-demo__canvas'
+        host.append(canvas)
+        instance.current = createEffect(
+          canvas,
+          { name: effect.name, fragment: effect.fragment!, params: effect.params, values: v, simulation: effect.simulation },
+          { ...runtimeOptions(c), reducedMotion: false, transparent: true },
+        )
+      }
+    } catch (e) {
+      // oxlint-disable-next-line react/set-state-in-effect
+      setError(e instanceof Error ? e.message : String(e))
+    }
+    return () => {
+      instance.current?.destroy()
+      instance.current = null
+      canvas?.remove()
+    }
+  }, [effect])
+
+  useEffect(() => {
+    instance.current?.set(values)
+    // Шейдерному курсору «скрыть курсор» — на самой странице.
+    if (effect.kind !== 'cursor' && page.current) page.current.style.cursor = values.hideCursor ? 'none' : ''
+  }, [values, effect.kind])
+  useEffect(() => {
+    const it = instance.current
+    if (it && 'setOptions' in it) it.setOptions(runtimeOptions(common))
+  }, [common])
+
+  return (
+    <div className="preview preview--cursor">
+      <div ref={page} className="cursor-demo">
+        <p className="demo__eyebrow">Поводите мышью</p>
+        <h2>Курсор, который запоминается</h2>
+        <p>Наведите на кнопки и ссылки, кликните — посмотрите, как курсор отвечает. Это обычная страница: текст, <a href="#cursor">ссылка</a>, карточки.</p>
+        <div className="cursor-demo__actions">
+          <button type="button" className="button button--primary">Главная кнопка</button>
+          <button type="button" className="button">Вторая</button>
+        </div>
+        <div className="cursor-demo__cards">
+          <div className="cursor-demo__card cursor-demo__card--light">Светлая карточка</div>
+          <div className="cursor-demo__card cursor-demo__card--accent">Яркая карточка</div>
+          <div className="cursor-demo__card">Тёмная карточка</div>
+        </div>
+      </div>
       {error && <p className="preview__error">{error}</p>}
     </div>
   )

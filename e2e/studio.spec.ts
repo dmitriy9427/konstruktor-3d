@@ -42,7 +42,7 @@ for (const effect of EFFECTS) {
     // 3D в CI рисует программный рендер (SwiftShader): меньше пикселей и больше времени.
     if (effect.kind === 'three') test.slow()
     await page.goto(`studio.html?e=${effect.id}${effect.kind === 'three' ? '&_quality=0.5' : ''}`)
-    await expect(page.getByRole('heading', { level: 1, name: effect.name }).or(page.locator('.preview--image, .preview--tilt, .preview--transition'))).toBeVisible()
+    await expect(page.getByRole('heading', { level: 1, name: effect.name }).or(page.locator('.preview--image, .preview--tilt, .preview--transition, .preview--cursor'))).toBeVisible()
     await expect(page.locator('.preview__error')).toHaveCount(0)
     if (effect.kind === 'transition') {
       // Прокручиваем мини-страницу превью: на середине стека секция горит, в конце — скрыта.
@@ -61,6 +61,13 @@ for (const effect of EFFECTS) {
       await expect(cover).toHaveCSS('visibility', 'hidden')
       await demo.evaluate((d) => d.scrollTo(0, 0))
       await expect(cover).toHaveCSS('visibility', 'visible')
+    } else if (effect.kind === 'cursor' || effect.overlay) {
+      // Курсор: проводим мышью по демо-странице — след появляется.
+      const box = (await page.locator('.preview').boundingBox())!
+      const before = (await page.locator('.cursor-demo').screenshot()).toString('base64')
+      for (let i = 0; i <= 20; i++) await page.mouse.move(box.x + box.width * (0.2 + 0.03 * i), box.y + box.height * 0.45)
+      await page.waitForTimeout(150)
+      expect((await page.locator('.cursor-demo').screenshot()).toString('base64'), 'курсор что-то нарисовал').not.toBe(before)
     } else if (effect.kind !== 'css') {
       const selector = effect.kind === 'image' ? '.photo__canvas' : effect.kind === 'slides' ? '.slider__canvas' : '.preview__canvas'
       // 3D: three.js грузится лениво — ждём холст.
@@ -314,3 +321,25 @@ test('текущий пресет подсвечен; сдвинули полз�
   await page.getByRole('slider', { name: 'Ветер' }).press('ArrowRight')
   await expect(chip).toHaveAttribute('aria-pressed', 'false')
 })
+
+for (const id of ['cursor-trail', 'cursor-fluid']) {
+  test(`экспортированный курсор «${id}» работает на чистой странице`, async ({ page }) => {
+    await page.goto(`studio.html?e=${id}`)
+    await page.getByRole('button', { name: 'Забрать код' }).click()
+    const code = await page.getByRole('dialog').locator('code').textContent()
+    const errors: string[] = []
+    page.on('pageerror', (e) => errors.push(e.message))
+    await page.goto('about:blank')
+    await page.setContent('<div style="height:100vh;background:#111"></div>')
+    await page.evaluate(async (source) => {
+      const url = URL.createObjectURL(new Blob([source!], { type: 'text/javascript' }))
+      const { mount } = await import(/* @vite-ignore */ url)
+      mount()
+    }, code)
+    const before = (await page.screenshot()).toString('base64')
+    for (let i = 0; i <= 20; i++) await page.mouse.move(100 + i * 20, 200)
+    await page.waitForTimeout(200)
+    expect((await page.screenshot()).toString('base64')).not.toBe(before)
+    expect(errors).toEqual([])
+  })
+}

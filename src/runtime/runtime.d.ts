@@ -79,6 +79,8 @@ export type EffectOptions = {
   scrollStack?: HTMLElement | null
   /** Контейнер прокрутки (по умолчанию — окно). */
   scroller?: HTMLElement | null
+  /** Прозрачный холст поверх страницы (курсоры): fragColor — с умноженной на альфу краской. */
+  transparent?: boolean
   /** Засыпать через столько секунд без действий пользователя (0 — никогда). */
   sleepAfter?: number
   /** Не больше стольких кадров в секунду (0 — сколько даёт экран). */

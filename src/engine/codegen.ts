@@ -18,6 +18,8 @@ import runtimeSource from '../runtime/runtime.js?raw'
 // oxlint-disable-next-line import/default
 import tiltSource from '../runtime/tilt.js?raw'
 // oxlint-disable-next-line import/default
+import cursorSource from '../runtime/cursor.js?raw'
+// oxlint-disable-next-line import/default
 import sceneSource from '../runtime/scene.js?raw'
 // oxlint-disable-next-line import/default
 import galaxySource from '../runtime/three/galaxy.js?raw'
@@ -88,7 +90,7 @@ const SPEC = {
   simulation: ${json(effect.simulation)},` : ''}
 }
 
-const OPTIONS = ${json({ ...runtimeOptions(common), post: common.post })}
+const OPTIONS = ${json({ ...runtimeOptions(common), post: common.post })}${effect.overlay ? `\nconst VALUES_HIDE_CURSOR = ${Boolean(values.hideCursor)}` : ''}
 
 /**
  * Запустить эффект в элементе.
@@ -105,13 +107,21 @@ ${
  * @param {HTMLElement} target
  * @param {object} [options] переопределить настройки: { mouse: false, quality: 1 }
  */
-export function mount(target, options = {}) {
+export function mount(target${effect.overlay ? ' = document.body' : ''}, options = {}) {
   let canvas = target
   if (!(target instanceof HTMLCanvasElement)) {
     canvas = document.createElement('canvas')
     canvas.setAttribute('aria-hidden', 'true')
-    Object.assign(canvas.style, { position: 'absolute', inset: '0', width: '100%', height: '100%', display: 'block' })
-    if (getComputedStyle(target).position === 'static') target.style.position = 'relative'
+${
+  effect.overlay
+    ? `    // Курсор — прозрачный холст поверх страницы (или блока); клики проходят сквозь.
+    const page = target === document.body
+    Object.assign(canvas.style, { position: page ? 'fixed' : 'absolute', inset: '0', width: '100%', height: '100%', display: 'block', pointerEvents: 'none', zIndex: '2147483000' })
+    if (!page && getComputedStyle(target).position === 'static') target.style.position = 'relative'
+    if (VALUES_HIDE_CURSOR) target.style.cursor = 'none'`
+    : `    Object.assign(canvas.style, { position: 'absolute', inset: '0', width: '100%', height: '100%', display: 'block' })
+    if (getComputedStyle(target).position === 'static') target.style.position = 'relative'`
+}
     target.append(canvas)
   }
 ${
@@ -129,7 +139,7 @@ ${
 `
 }  let effect
   try {
-    effect = createEffect(canvas, spec, { ...OPTIONS, ...options, post: { ...OPTIONS.post, ...options.post } })
+    effect = createEffect(canvas, spec, { ...OPTIONS, ...options, post: { ...OPTIONS.post, ...options.post }${effect.overlay ? ', transparent: true' : ''} })
   } catch (error) {
     // Нет WebGL2 — убираем холст, остаётся то, что под ним (картинка или фон блока).
     console.warn('[3D-конструктор]', error)
@@ -222,6 +232,23 @@ export function mount(target, options = {}) {
 `
 }
 
+function cursorModule(effect: EffectDef, values: Values, link?: string) {
+  return `${header(effect, link).replace("mount(document.querySelector('#hero-bg'))", 'mount()   // вся страница; или mount(блок)')}
+${cursorSource.trim()}
+
+const VALUES = ${json({ ...values, type: effect.id.replace('cursor-', ''), name: effect.name })}
+
+/**
+ * Включить курсор на всей странице (по умолчанию) или внутри блока.
+ * @param {HTMLElement} [target]
+ * @param {object} [overrides] — поменять параметры: { color: '#ff0', hideCursor: true }
+ */
+export function mount(target = document.body, overrides = {}) {
+  return createCursor(target, { ...VALUES, ...overrides })
+}
+`
+}
+
 function tiltModule(effect: EffectDef, values: Values, link?: string) {
   return `${header(effect, link)}
 ${tiltSource.trim()}
@@ -262,6 +289,22 @@ export function mount(target, options = {}) {
 
 function elementWrapper(effect: EffectDef) {
   const tag = elementTag(effect)
+  if (effect.kind === 'cursor' || effect.overlay) {
+    return `
+
+/** Веб-компонент: <${tag}></${tag}> где угодно на странице — курсор на всю страницу. */
+class Cursor extends HTMLElement {
+  connectedCallback() {
+    this.instance = mount(document.body)
+  }
+  disconnectedCallback() {
+    this.instance?.destroy()
+    this.instance = null
+  }
+}
+if (!customElements.get('${tag}')) customElements.define('${tag}', Cursor)
+`
+  }
   if (effect.kind === 'transition') {
     return `
 
@@ -503,8 +546,21 @@ function scrollStageUsage(effect: EffectDef, options: ExportOptions) {
 `
 }
 
+function cursorUsage(effect: EffectDef, options: ExportOptions) {
+  const tag = elementTag(effect)
+  if (options.format === 'element') return `<script type="module" src="./effect.js"></script>\n\n<!-- Курсор на всю страницу: тег можно поставить куда угодно, один раз. -->\n<${tag}></${tag}>\n`
+  return `<!-- Курсор на всю страницу. Подключить один раз, например в конце <body>. -->
+<script type="module">
+  import { mount } from './effect.js'
+  const cursor = mount()            // или mount(document.querySelector('.hero')) — только в блоке
+  // cursor.destroy() — выключить
+</script>
+`
+}
+
 function usageHtml(effect: EffectDef, options: ExportOptions, values: Values) {
   if (effect.kind === 'transition') return transitionUsage(effect, options, values)
+  if (effect.kind === 'cursor' || effect.overlay) return cursorUsage(effect, options)
   if (values.cycle === 'scroll') return scrollStageUsage(effect, options)
   if (effect.kind === 'slides') return slidesUsage(effect, options)
   // Заглушка — цвет фона эффекта (если он есть), иначе первый цвет.
@@ -696,7 +752,27 @@ ${create}
 `
 }
 
+function reactCursor(effect: EffectDef) {
+  return `/**
+ * ${effect.name} — курсор из 3D-конструктора. Поставьте один раз, например в App:
+ *   <Cursor />
+ * StrictMode безопасен: курсор корректно снимается и ставится заново.
+ */
+import { useEffect } from 'react'
+import { mount } from './effect.js'
+
+export function Cursor() {
+  useEffect(() => {
+    const cursor = mount(document.body)
+    return () => cursor.destroy()
+  }, [])
+  return null
+}
+`
+}
+
 function reactComponent(effect: EffectDef, options: ExportOptions) {
+  if (effect.kind === 'cursor' || effect.overlay) return reactCursor(effect)
   if (effect.kind === 'transition') return reactTransition(effect, options)
   if (effect.kind === 'slides') return reactSlides(effect, options)
   const isImage = effect.kind === 'image'
@@ -754,6 +830,8 @@ export function generate(effect: EffectDef, values: Values, common: Common, opti
       ? tiltModule(effect, values, options.link)
       : effect.kind === 'three'
         ? sceneModule(effect, values, common, options.link)
+      : effect.kind === 'cursor'
+        ? cursorModule(effect, values, options.link)
       : effect.kind === 'transition'
         ? transitionModule(effect, values, options.link)
         : shaderModule(effect, values, common, options.link)
@@ -762,7 +840,8 @@ export function generate(effect: EffectDef, values: Values, common: Common, opti
     files.push({ name: 'effect.js', language: 'js', code: base + elementWrapper(effect) })
     files.push({ name: 'index.html', language: 'html', code: usageHtml(effect, options, values) })
   } else if (options.format === 'react') {
-    const component = effect.kind === 'transition' ? 'Transition.tsx' : effect.kind === 'slides' ? 'Slider.tsx' : 'Effect.tsx'
+    const component =
+      effect.kind === 'transition' ? 'Transition.tsx' : effect.kind === 'slides' ? 'Slider.tsx' : effect.kind === 'cursor' || effect.overlay ? 'Cursor.tsx' : 'Effect.tsx'
     files.push({ name: component, language: 'tsx', code: reactComponent(effect, options) })
     files.push({ name: 'effect.js', language: 'js', code: base })
   } else {

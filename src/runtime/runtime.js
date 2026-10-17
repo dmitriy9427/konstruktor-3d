@@ -214,7 +214,9 @@ const DEFAULT_POST = { grain: 0, chroma: 0, vignette: 0, bloom: 0 }
  * @returns {import('./runtime').EffectInstance}
  */
 export function createEffect(canvas, spec, options = {}) {
-  const gl = canvas.getContext('webgl2', { antialias: false, alpha: false, premultipliedAlpha: false, preserveDrawingBuffer: false })
+  // transparent — холст поверх страницы (курсоры): шейдер пишет цвет, уже умноженный на альфу.
+  const transparent = Boolean(options.transparent)
+  const gl = canvas.getContext('webgl2', { antialias: false, alpha: transparent, premultipliedAlpha: transparent, preserveDrawingBuffer: false })
   if (!gl) throw new Error('WebGL2 недоступен')
 
   const opts = {
@@ -372,7 +374,8 @@ export function createEffect(canvas, spec, options = {}) {
   // ─── Кадр для постобработки ───────────────────────────────────────────────
   let fbo = null
   let fboTexture = null
-  const postEnabled = () => opts.post.grain > 0 || opts.post.chroma > 0 || opts.post.vignette > 0 || opts.post.bloom > 0
+  // Постобработка пишет непрозрачный кадр — у прозрачного холста её нет.
+  const postEnabled = () => !transparent && opts.post.grain > 0 || opts.post.chroma > 0 || opts.post.vignette > 0 || opts.post.bloom > 0
   const ensureFbo = () => {
     fboTexture ??= gl.createTexture()
     gl.bindTexture(gl.TEXTURE_2D, fboTexture)

@@ -290,7 +290,7 @@ export function App() {
           common={common}
           onChange={setCommon}
           usesMouse={effect.usesMouse ?? false}
-          shader={shader}
+          shader={shader && !effect.overlay}
           quality={shader || is3d}
           drawingPath={drawing === '_path'}
           onDrawPath={(on) => setDrawing(on ? '_path' : null)}

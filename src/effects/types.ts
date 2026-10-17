@@ -19,10 +19,12 @@ export type EffectKind =
   | 'slides'
   /** 3D-сцена на three.js: частицы, стекло. */
   | 'three'
+  /** Курсор без WebGL: след из частиц, кольцо, фонарик (src/runtime/cursor.js). */
+  | 'cursor'
   /** Переход между секциями: SVG-фильтр поверх настоящей секции. */
   | 'transition'
 
-export type Category = 'Свой эффект' | 'Фоны' | 'Изображения' | 'Переходы' | '3D' | 'Без WebGL'
+export type Category = 'Свой эффект' | 'Фоны' | 'Изображения' | 'Переходы' | '3D' | 'Курсоры' | 'Без WebGL'
 
 export type EffectDef = {
   id: string
@@ -33,6 +35,8 @@ export type EffectDef = {
   description: string
   /** Тело фрагментного шейдера (для quad и image). */
   fragment?: string
+  /** Шейдер поверх страницы: прозрачный холст на весь экран, клики проходят сквозь (курсоры). */
+  overlay?: boolean
   /** Симуляция: шейдер шага (состояние в текстуре, см. runtime.js), её результат — uSim. */
   simulation?: { fragment: string; size?: number }
   params: Params

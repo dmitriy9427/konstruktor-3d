@@ -4,6 +4,7 @@
  */
 import { aurora } from './aurora'
 import { cells } from './cells'
+import { CURSORS } from './cursors'
 import { clouds } from './clouds'
 import { imageDistort } from './image-distort'
 import { lava } from './lava'
@@ -21,9 +22,9 @@ import { waves } from './waves'
 /** «Свой эффект» в каталоге — с кодом шаблона; настоящий код Студия подставляет сама. */
 export const CUSTOM = makeCustomEffect(TEMPLATES[1].code)
 
-export const EFFECTS: EffectDef[] = [CUSTOM, noise, lava, cells, waves, clouds, space, aurora, plasma, imageDistort, burn, dissolve, curtain, slides, galaxy, swarm, morph, textParticles, glass, tilt]
+export const EFFECTS: EffectDef[] = [CUSTOM, noise, lava, cells, waves, clouds, space, aurora, plasma, imageDistort, burn, dissolve, curtain, slides, galaxy, swarm, morph, textParticles, glass, ...CURSORS, tilt]
 
-export const CATEGORIES: Category[] = ['Свой эффект', 'Фоны', 'Изображения', 'Переходы', '3D', 'Без WebGL']
+export const CATEGORIES: Category[] = ['Свой эффект', 'Фоны', 'Изображения', 'Переходы', '3D', 'Курсоры', 'Без WebGL']
 
 export const effectById = (id: string) => EFFECTS.find((e) => e.id === id)
 
