@@ -44,7 +44,8 @@ const vec3 T_HOR[5] = vec3[5](vec3(1.0, 0.78, 0.6), vec3(0.81, 0.89, 0.95), vec3
 const vec3 T_SUN[5] = vec3[5](vec3(1.0, 0.82, 0.48), vec3(1.0, 0.97, 0.9), vec3(1.0, 0.7, 0.42), vec3(0.67, 0.7, 0.76), vec3(0.87, 0.91, 1.0));
 const vec3 T_DEEP[5] = vec3[5](vec3(0.1, 0.09, 0.15), vec3(0.016, 0.07, 0.12), vec3(0.07, 0.04, 0.11), vec3(0.02, 0.03, 0.05), vec3(0.004, 0.012, 0.035));
 const vec3 T_LIT[5] = vec3[5](vec3(0.44, 0.35, 0.43), vec3(0.12, 0.43, 0.56), vec3(0.36, 0.16, 0.29), vec3(0.15, 0.22, 0.29), vec3(0.05, 0.11, 0.2));
-const float T_SUNH[5] = float[5](4.0, 35.0, 2.0, 30.0, 18.0);
+// Высота солнца — в долях видимого неба: 0 — горизонт, 1 — верх кадра.
+const float T_SUNH[5] = float[5](0.15, 0.85, 0.08, 0.8, 0.55);
 const float T_HAZE[5] = float[5](1.2, 0.5, 0.9, 1.6, 0.7);
 const float T_STORM[5] = float[5](0.0, 0.0, 0.0, 1.0, 0.0);
 
@@ -105,10 +106,10 @@ export const waves: EffectDef = {
       ],
       default: 'custom',
     },
-    timeOfDay: { type: 'number', label: 'Сцена', min: 0, max: 4, step: 0.01, default: 1, hint: '0 — рассвет, 1 — день, 2 — закат, 3 — шторм, 4 — ночь (для «Ползунок»). Так и будет при прокрутке' },
-    cycleSpeed: { type: 'number', label: 'Скорость смены суток', min: 0.1, max: 5, step: 0.05, default: 1, hint: 'Для «Само»: 1 — полный круг примерно за 100 секунд' },
-    haze: { type: 'number', label: 'Дымка', min: 0, max: 2, step: 0.01, default: 0.6, hint: 'Туман: вода вдали растворяется в небе' },
-    sunHeight: { type: 'number', label: 'Высота солнца, °', min: -10, max: 80, step: 1, default: 25, hint: 'Ниже — длиннее солнечная дорожка; меньше нуля — солнце за горизонтом' },
+    timeOfDay: { type: 'number', label: 'Сцена', min: 0, max: 4, step: 0.01, default: 1, hint: '0 — рассвет, 1 — день, 2 — закат, 3 — шторм, 4 — ночь (для «Ползунок»). Так и будет при прокрутке', when: { cycle: ['slider'] } },
+    cycleSpeed: { type: 'number', label: 'Скорость смены суток', min: 0.1, max: 5, step: 0.05, default: 1, hint: 'Для «Само»: 1 — полный круг примерно за 100 секунд', when: { cycle: ['time'] } },
+    haze: { type: 'number', label: 'Дымка', min: 0, max: 2, step: 0.01, default: 0.6, hint: 'Туман: вода вдали растворяется в небе', when: { cycle: ['custom'] } },
+    sunHeight: { type: 'number', label: 'Высота солнца', min: -0.3, max: 1, step: 0.01, default: 0.55, hint: '0 — солнце на горизонте, 1 — у верхнего края кадра, меньше нуля — за горизонтом. Ниже — длиннее солнечная дорожка', when: { cycle: ['custom'] } },
     sunSide: { type: 'number', label: 'Солнце слева–справа, °', min: -60, max: 60, step: 1, default: -15, hint: 'Где солнце по горизонтали' },
     sunSize: { type: 'number', label: 'Размер солнца', min: 0.3, max: 4, step: 0.01, default: 1, hint: 'Диск и ореол вокруг него' },
     glitter: { type: 'number', label: 'Блики', min: 0, max: 3, step: 0.01, default: 1, hint: 'Искры солнца на гребнях' },
@@ -119,11 +120,11 @@ export const waves: EffectDef = {
     drop: { type: 'number', label: 'Сила капли (клик)', min: 0, max: 3, step: 0.01, default: 1, hint: 'Насколько сильные круги от клика' },
     dropSize: { type: 'number', label: 'Размер капли', min: 0.05, max: 1.2, step: 0.01, default: 0.3, hint: 'Радиус удара от клика и курсора' },
     damping: { type: 'number', label: 'Затухание кругов', min: 0.9, max: 0.999, step: 0.001, default: 0.985, hint: 'Ближе к 1 — круги бегут дольше и дальше' },
-    deep: { type: 'color', label: 'Глубина', default: '#0a1a28', hint: 'Цвет воды в тени (для «Свои»)' },
-    shallow: { type: 'color', label: 'Вода на свету', default: '#2a6f8a', hint: 'Цвет освещённых склонов (для «Свои»)' },
-    skyTop: { type: 'color', label: 'Небо вверху', default: '#4a86c9', hint: 'Цвет неба в зените (для «Свои»)' },
-    skyHorizon: { type: 'color', label: 'Небо у горизонта', default: '#d6e6f0', hint: 'Цвет неба и дымки у горизонта (для «Свои»)' },
-    sun: { type: 'color', label: 'Солнце', default: '#fff3d6', hint: 'Цвет солнца и бликов (для «Свои»)' },
+    deep: { type: 'color', label: 'Глубина', default: '#0a1a28', hint: 'Цвет воды в тени (для «Свои»)', when: { cycle: ['custom'] } },
+    shallow: { type: 'color', label: 'Вода на свету', default: '#2a6f8a', hint: 'Цвет освещённых склонов (для «Свои»)', when: { cycle: ['custom'] } },
+    skyTop: { type: 'color', label: 'Небо вверху', default: '#4a86c9', hint: 'Цвет неба в зените (для «Свои»)', when: { cycle: ['custom'] } },
+    skyHorizon: { type: 'color', label: 'Небо у горизонта', default: '#d6e6f0', hint: 'Цвет неба и дымки у горизонта (для «Свои»)', when: { cycle: ['custom'] } },
+    sun: { type: 'color', label: 'Солнце', default: '#fff3d6', hint: 'Цвет солнца и бликов (для «Свои»)', when: { cycle: ['custom'] } },
   },
   presets: [
     { name: 'День', values: { cycle: 'custom' } },
@@ -180,7 +181,9 @@ float gBoltEnd;   // где разряд касается воды (по вер�
 float gBoltNear;  // 0 — у горизонта, 1 — совсем близко
 
 vec3 sunDir() {
-  float el = radians(gSunH);
+  // Высота в долях видимого неба → угол: верх кадра виден под углом atan(0.5 − наклон взгляда).
+  // (если неба не видно — вид сверху — считаем от угла 17°, чтобы блики остались).
+  float el = gSunH * max(atan(0.5 - pitch()), 0.3) * 0.92;
   float az = radians(uSunSide);
   return normalize(vec3(sin(az) * cos(el), sin(el), cos(az) * cos(el)));
 }

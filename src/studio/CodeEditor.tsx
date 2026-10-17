@@ -4,7 +4,7 @@
  * Ошибки компиляции видеокарты приходят с номерами строк всего шейдера —
  * пересчитываем их в строки этого поля.
  */
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 
 import { codeFromEffect, TEMPLATES } from '../engine/custom'
 import { EFFECTS } from '../effects'
@@ -24,6 +24,9 @@ export function CodeEditor({
   paramErrors: string[]
 }) {
   const area = useRef<HTMLTextAreaElement>(null)
+  // Что загружено последним — показываем в списке (после правок — «изменён»).
+  const [loaded, setLoaded] = useState<{ value: string; code: string } | null>(null)
+  const current = loaded && loaded.code === code ? loaded.value : ''
   const gutter = useRef<HTMLPreElement>(null)
   const lines = code.split('\n').length
   const copyable = EFFECTS.filter((e) => e.kind === 'quad' && !e.simulation && e.id !== 'custom')
@@ -34,17 +37,20 @@ export function CodeEditor({
         <label className="editor__start">
           <span>Начать с</span>
           <select
-            value=""
+            value={current}
             onChange={(e) => {
               const v = e.currentTarget.value
               if (!v) return
               const template = TEMPLATES.find((t) => t.name === v)
               const source = EFFECTS.find((x) => x.id === v)
               const next = template?.code ?? (source ? codeFromEffect(source) : null)
-              if (next && (code.trim() === '' || confirm('Заменить текущий код?'))) onLoad(next)
+              if (next && (code.trim() === '' || confirm('Заменить текущий код?'))) {
+                onLoad(next)
+                setLoaded({ value: v, code: next })
+              }
             }}
           >
-            <option value="">шаблона…</option>
+            <option value="">{loaded ? 'своего кода (изменён)' : 'шаблона…'}</option>
             <optgroup label="Шаблоны">
               {TEMPLATES.map((t) => (
                 <option key={t.name} value={t.name}>

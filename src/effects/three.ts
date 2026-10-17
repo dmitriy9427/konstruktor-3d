@@ -155,7 +155,7 @@ export const morph: EffectDef = {
     weight: { type: 'number', label: 'Жирность шрифта', min: 300, max: 900, step: 100, default: 800, hint: 'Толщина букв: влияет на плотность логотипа' },
     depth: { type: 'number', label: 'Объём логотипа', min: 0, max: 1.5, step: 0.01, default: 0.08, hint: 'Толщина логотипа по глубине: 0 — плоский' },
     trigger: trigger('auto', 'Из кода: effect.progress(0.5)'),
-    period: { type: 'number', label: 'Период «само», с', min: 1, max: 12, step: 0.5, default: 4, hint: 'За сколько секунд цикл «логотип → фигура → логотип» в режиме «Само»' },
+    period: { type: 'number', when: { trigger: ['auto'] }, label: 'Период «само», с', min: 1, max: 12, step: 0.5, default: 4, hint: 'За сколько секунд цикл «логотип → фигура → логотип» в режиме «Само»' },
     count: { type: 'number', label: 'Частиц', min: 3000, max: 60000, step: 1000, default: 20000 },
     chaos: { type: 'number', label: 'Вихрь в пути', min: 0, max: 2, step: 0.01, default: 0.8, hint: 'Сила вихря, в который попадают частицы по дороге' },
     size: { type: 'number', label: 'Размер', min: 0.2, max: 3, step: 0.01, default: 1 },
@@ -189,7 +189,7 @@ export const textParticles: EffectDef = {
   params: {
     text: { type: 'text', label: 'Текст', default: 'Привет', maxLength: 16 },
     trigger: trigger('auto', 'Курсор расталкивает точки всегда; из кода: effect.progress(1)'),
-    period: { type: 'number', label: 'Период «само», с', min: 1, max: 12, step: 0.5, default: 5 },
+    period: { type: 'number', label: 'Период «само», с', min: 1, max: 12, step: 0.5, default: 5, when: { trigger: ['auto'] } },
     scatter: { type: 'number', label: 'Сила рассыпания', min: 0, max: 1.5, step: 0.01, default: 1, hint: 'Насколько сильно рассыпается текст' },
     repel: { type: 'number', label: 'Курсор расталкивает', min: -2, max: 2, step: 0.01, default: 0.8, hint: 'Меньше нуля — курсор притягивает точки' },
     repelRadius: { type: 'number', label: 'Радиус курсора', min: 1, max: 12, step: 0.1, default: 4, hint: 'Радиус, в котором курсор действует на частицы' },

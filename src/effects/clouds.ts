@@ -28,12 +28,13 @@ export const clouds: EffectDef = {
     mode: {
       type: 'select',
       label: 'Вид',
-      hint: 'Облака — пухлые клубы. Дым — тонкие закрученные пряди',
+      hint: 'Кучевые — пухлые клубы (шум Перлина и Ворли). Перистые — размытые волокна. Дым — тонкие закрученные пряди',
       options: [
-        { value: 'clouds', label: 'Облака' },
+        { value: 'cumulus', label: 'Кучевые' },
+        { value: 'clouds', label: 'Перистые' },
         { value: 'smoke', label: 'Дым' },
       ],
-      default: 'clouds',
+      default: 'cumulus',
     },
     speed: { type: 'number', label: 'Ветер', min: 0, max: 2, step: 0.01, default: 0.35, hint: 'Скорость, с которой облака несёт ветер' },
     windAngle: { type: 'number', label: 'Направление ветра, °', min: 0, max: 360, step: 1, default: 20, hint: '0 — вправо, 90 — вверх, 180 — влево, 270 — вниз' },
@@ -70,18 +71,58 @@ export const clouds: EffectDef = {
     sun: { type: 'color', label: 'Солнце', default: '#fff1d6', hint: 'Цвет солнца и кромки' },
   },
   presets: [
-    { name: 'День', values: { mode: 'clouds' } },
+    { name: 'День', values: { mode: 'cumulus' } },
+    { name: 'Ясно', values: { mode: 'cumulus', coverage: 0, sunGlow: 1.2, sunY: 0.8 } },
+    { name: 'Перистые', values: { mode: 'clouds', coverage: 0.45, warp: 1.6, softness: 0.25 } },
     { name: 'Закат', values: { skyTop: '#2b1b4f', skyBottom: '#ff8a5c', light: '#ffd2a8', shadow: '#4a2f5c', sun: '#ffb36b', sunY: 0.35, sunX: 0.6, silver: 1.4, coverage: 0.45 } },
     { name: 'Гроза', values: { skyTop: '#151a22', skyBottom: '#3c4554', light: '#a7b0bf', shadow: '#1a1f27', sun: '#c9d2e0', coverage: 0.85, speed: 0.9, absorption: 3, sunGlow: 0.1, warp: 1.6 } },
     { name: 'Дым', values: { mode: 'smoke', skyTop: '#07070b', skyBottom: '#14141c', light: '#e9e6f2', shadow: '#2a2833', sun: '#ffffff', coverage: 0.5, warp: 1.6, scale: 1.6, softness: 0.3, density: 0.8, absorption: 0.8, silver: 0.3, sunGlow: 0, depth: 0.35, windAngle: 90, speed: 0.5, mouseMode: 'swirl' } },
     { name: 'Цветной дым', values: { mode: 'smoke', skyTop: '#05030c', skyBottom: '#0d0618', light: '#ff7ac6', shadow: '#3b1d8f', sun: '#22d3ee', coverage: 0.55, warp: 1.8, scale: 1.5, softness: 0.3, density: 0.85, absorption: 1, silver: 1.2, sunGlow: 0.2, depth: 0.5, windAngle: 70, mouseMode: 'swirl' } },
-    { name: 'Туман', values: { coverage: 0.8, softness: 0.5, density: 0.45, detail: 0.3, absorption: 0.4, skyTop: '#9fb3c8', skyBottom: '#dde6ee', light: '#ffffff', shadow: '#b6c2cf', speed: 0.15 } },
+    { name: 'Туман', values: { mode: 'clouds', coverage: 0.8, softness: 0.5, density: 0.45, detail: 0.3, absorption: 0.4, skyTop: '#9fb3c8', skyBottom: '#dde6ee', light: '#ffffff', shadow: '#b6c2cf', speed: 0.15 } },
   ],
   fragment: /* glsl */ `
 vec2 gWind;   // смещение ветром (растёт со временем)
 float gT;     // время клубления
 
 // Плотность облака в точке q (0…1). far — дальний слой: крупнее и медленнее.
+// ─── Шум Перлина (градиентный) и Ворли (клеточный) ──────────────────────
+// У value-шума (fbm из общих функций) в узлах сетки — случайные ЧИСЛА, отсюда
+// «размытые пятна». У Перлина — случайные НАПРАВЛЕНИЯ (градиенты): рисунок
+// чище, без «квадратности». Ворли — расстояние до ближайшей из случайных
+// точек: даёт круглые ячейки — из них получаются пухлые клубы.
+vec2 grad(vec2 i) { float a = hash(i) * 6.2832; return vec2(cos(a), sin(a)); }
+float perlin(vec2 p) {
+  vec2 i = floor(p), f = fract(p);
+  vec2 u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
+  float a = dot(grad(i), f), b = dot(grad(i + vec2(1, 0)), f - vec2(1, 0));
+  float c = dot(grad(i + vec2(0, 1)), f - vec2(0, 1)), d = dot(grad(i + vec2(1, 1)), f - vec2(1, 1));
+  return 0.5 + 0.7 * mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+}
+float perlinFbm(vec2 p) {
+  float v = 0.0, a = 0.5;
+  for (int i = 0; i < 5; i++) { v += a * perlin(p); p = p * 2.02 + vec2(3.1, 7.7); a *= 0.5; }
+  return v;
+}
+float worley(vec2 p) {
+  vec2 i = floor(p), f = fract(p);
+  float d = 1.0;
+  for (int y = -1; y <= 1; y++)
+  for (int x = -1; x <= 1; x++) {
+    vec2 o = vec2(float(x), float(y));
+    d = min(d, length(o + hash2(i + o) - f));
+  }
+  return 1.0 - d;   // 1 в центре ячейки — «клуб»
+}
+float worleyFbm(vec2 p) {
+  return worley(p) * 0.625 + worley(p * 2.0) * 0.25 + worley(p * 4.0) * 0.125;
+}
+// Перлин-Ворли: крупная форма от Перлина, края «обкусаны» клубами Ворли.
+float cumulus(vec2 p) {
+  float pf = perlinFbm(p * 0.8);
+  float wf = worleyFbm(p * 1.6);
+  return clamp((pf - (1.0 - wf) * 0.55) / 0.55, 0.0, 1.0);
+}
+
 // detail = false — дешёвая версия без мелких клочьев (для расчёта света).
 float density(vec2 q, float far, bool fine) {
   vec2 w = gWind * mix(1.0, 0.5, far);
@@ -89,7 +130,14 @@ float density(vec2 q, float far, bool fine) {
   // Шум от шума: координаты искривлены — облако клубится.
   vec2 k = vec2(fbm(p * 0.7 + gT), fbm(p * 0.7 + vec2(5.2, 1.3) - gT));
   vec2 warp = uWarp * (k - 0.5) * 2.0;
-  if (uMode > 0.5) {
+  if (uMode < 0.5) {
+    // Кучевые: Перлин-Ворли, искривлённый слабее — клубы остаются круглыми.
+    float n = cumulus(p + warp * 0.35);
+    if (fine) n += uDetail * 0.12 * (worley(p * 6.0 - gT) - 0.5);
+    float th = 1.05 - uCoverage * 0.9;   // 0 — облаков нет совсем
+    return smoothstep(th - uSoftness * 0.6, th + uSoftness * 0.6, n);
+  }
+  if (uMode > 1.5) {
     // Дым: второй виток искривления — клубы вытягиваются в завитки.
     vec2 k2 = vec2(fbm(p + warp + vec2(1.7, 9.2) + gT * 0.7), fbm(p + warp + vec2(8.3, 2.8) - gT * 0.6));
     warp += uWarp * (k2 - 0.5) * 2.5;
@@ -97,7 +145,7 @@ float density(vec2 q, float far, bool fine) {
   float n = fbm(p + warp);
   // Мелкие клочья по краям.
   if (fine) n += uDetail * 0.18 * (fbm(p * 3.5 - gT * 1.5) - 0.5);
-  float threshold = 0.78 - uCoverage * 0.55;
+  float threshold = 0.95 - uCoverage * 0.7;   // 0 — облаков нет совсем
   return smoothstep(threshold - uSoftness, threshold + uSoftness, n);
 }
 
@@ -134,7 +182,7 @@ void main() {
     vec2 q = p + far * vec2(3.7, 1.9);
     float d = density(q, far, true);
     if (d <= 0.001) continue;
-    if (uMode > 0.5) {
+    if (uMode > 1.5) {
       // Дым светится сам: плотнее — светлее; полупрозрачный, слои складываются.
       vec3 smoke = mix(uShadow, uLight, smoothstep(0.0, 0.9, d)) + uSun * pow(d, 4.0) * uSilver * 0.5;
       col = mix(col, smoke, d * uDensity * (far > 0.5 ? 0.5 * uDepth : 0.85));

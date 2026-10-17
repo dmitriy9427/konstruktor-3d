@@ -20,14 +20,35 @@ type ParamProps = {
   newStroke?: boolean
   onDraw?: (on: boolean) => void
   onNewStroke?: () => void
+  /** Параметр сейчас не действует — пояснение, когда заработает. */
+  inactive?: string
 }
 
 export function ParamControl(props: ParamProps) {
-  return (
+  const row = (
     <WithHint hint={props.param.hint}>
       <ParamInput {...props} />
     </WithHint>
   )
+  if (!props.inactive) return row
+  return (
+    <>
+      <div className="control--inactive">{row}</div>
+      <p className="inactive-note">{props.inactive}</p>
+    </>
+  )
+}
+
+/** Пояснение для неактивного параметра или null, если он действует. */
+export function inactiveNote(param: Param, params: Record<string, Param>, values: Values): string | null {
+  if (!param.when) return null
+  for (const [key, allowed] of Object.entries(param.when)) {
+    if (allowed.includes(values[key] as string | boolean)) continue
+    const other = params[key]
+    const names = allowed.map((a) => (other?.type === 'select' ? (other.options.find((o) => o.value === a)?.label ?? a) : a === true ? 'вкл.' : a === false ? 'выкл.' : a))
+    return `Действует, когда «${other?.label ?? key}»: ${names.map((n) => `«${n}»`).join(' или ')}`
+  }
+  return null
 }
 
 function ParamInput({ name, param, value, onChange, drawing, newStroke, onDraw, onNewStroke }: ParamProps) {

@@ -13,7 +13,7 @@ import { mountPerf } from '../engine/perf'
 import type { Values } from '../runtime/runtime'
 import { CodeDrawer } from './CodeDrawer'
 import { CodeEditor } from './CodeEditor'
-import { CommonControls, ParamControl, Toggle } from './Controls'
+import { CommonControls, inactiveNote, ParamControl, Toggle } from './Controls'
 import { Preview } from './Preview'
 
 const DEMO_IMAGE = `${import.meta.env.BASE_URL}demo/photo.svg`
@@ -245,6 +245,7 @@ export function App() {
                 }))
             }}
             onNewStroke={() => setNewStroke(true)}
+            inactive={inactiveNote(param, effect.params, values) ?? undefined}
           />
         ))}
 

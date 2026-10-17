@@ -61,6 +61,9 @@ export const space: EffectDef = {
     nebulaX: { type: 'number', label: 'Центр туманности X', min: 0, max: 1, step: 0.01, default: 0.6, hint: 'Где туманность ярче всего' },
     nebulaY: { type: 'number', label: 'Центр туманности Y', min: 0, max: 1, step: 0.01, default: 0.55, hint: 'Где туманность ярче всего' },
 
+    galaxies: { type: 'number', label: 'Далёкие галактики', min: 0, max: 1, step: 0.01, default: 0.3, hint: 'Сколько маленьких спиральных галактик вдали. 0 — нет' },
+    galaxySize: { type: 'number', label: 'Размер галактик', min: 0.3, max: 3, step: 0.01, default: 1, hint: 'Размер далёких галактик' },
+    galaxyColor: { type: 'color', label: 'Галактики', default: '#ffd9b0', hint: 'Цвет ядер галактик (рукава — с оттенком туманности)' },
     meteors: { type: 'number', label: 'Метеоры', min: 0, max: 1, step: 0.01, default: 0.4, hint: 'Как часто пролетают метеоры. 0 — нет' },
     meteorShape: {
       type: 'select',
@@ -90,6 +93,7 @@ export const space: EffectDef = {
       default: 'some',
     },
     custom: {
+      when: { constellations: ['custom'] },
       type: 'points',
       label: 'Своё созвездие',
       default: '0.3,0.3,0;0.42,0.42,1;0.55,0.38,1;0.66,0.5,1;0.55,0.38,0;0.58,0.24,1',
@@ -99,6 +103,7 @@ export const space: EffectDef = {
       hint: 'Нажмите «Рисовать», потом кликайте по превью — каждая звезда соединится с предыдущей. «Новая линия» — следующая звезда начнёт отдельную линию',
     },
     constStyle: {
+      when: { constellations: ['some', 'all', 'custom'] },
       type: 'select',
       label: 'Появление созвездий',
       hint: 'Сразу — видно целиком. Прорисовка — звёзды и линии появляются по очереди и остаются. По кругу — рисуется, гаснет и снова. Пульс — линии мягко «дышат»',
@@ -110,18 +115,19 @@ export const space: EffectDef = {
       ],
       default: 'draw',
     },
-    drawSpeed: { type: 'number', label: 'Скорость прорисовки', min: 0.1, max: 3, step: 0.01, default: 1, hint: 'Сколько линий в секунду дорисовывается (для «Прорисовка» и «По кругу»)' },
-    constBrightness: { type: 'number', label: 'Яркость созвездий', min: 0, max: 2, step: 0.01, default: 1, hint: 'Яркость звёзд и линий созвездий' },
+    drawSpeed: { type: 'number', label: 'Скорость прорисовки', min: 0.1, max: 3, step: 0.01, default: 1, hint: 'Сколько линий в секунду дорисовывается (для «Прорисовка» и «По кругу»)', when: { constStyle: ['draw', 'loop'] } },
+    constBrightness: { type: 'number', label: 'Яркость созвездий', min: 0, max: 2, step: 0.01, default: 1, hint: 'Яркость звёзд и линий созвездий', when: { constellations: ['some', 'all', 'custom'] } },
 
     background: { type: 'color', label: 'Фон', default: '#03030a', hint: 'Цвет космоса' },
     nebulaA: { type: 'color', label: 'Туманность 1', default: '#4b1d8f', hint: 'Первый цвет туманности' },
     nebulaB: { type: 'color', label: 'Туманность 2', default: '#0f6c8a', hint: 'Второй цвет туманности' },
     starColor: { type: 'color', label: 'Звёзды', default: '#fff6e8', hint: 'Цвет звёзд' },
     meteorColor: { type: 'color', label: 'Метеоры', default: '#ffe2b0', hint: 'Цвет головы и хвоста метеора' },
-    lineColor: { type: 'color', label: 'Линии созвездий', default: '#8fb4ff', hint: 'Цвет линий созвездий' },
+    lineColor: { type: 'color', label: 'Линии созвездий', default: '#8fb4ff', hint: 'Цвет линий созвездий', when: { constellations: ['some', 'all', 'custom'] } },
   },
   presets: [
     { name: 'Глубокий космос', values: { nebulaA: '#4b1d8f', nebulaB: '#0f6c8a' } },
+    { name: 'Глубокое поле', values: { galaxies: 1, galaxySize: 1.3, nebula: 0.2, constellations: 'none', meteors: 0, density: 0.3 } },
     { name: 'Звездопад', values: { meteors: 1, meteorLength: 0.45, nebula: 0.4, constellations: 'none', meteorSpeed: 1.4 } },
     { name: 'Огненные шары', values: { meteors: 0.6, meteorShape: 'fireball', meteorColor: '#ffb36b', nebula: 0.5 } },
     { name: 'Атлас созвездий', values: { constellations: 'all', constStyle: 'draw', drawSpeed: 2, nebula: 0.35, meteors: 0.15, density: 0.6 } },
@@ -167,6 +173,33 @@ vec3 nebula(vec2 p, vec2 m) {
   }
   vec3 col = uNebulaA * shape + uNebulaB * smoothstep(0.5, 1.0, n2) * shape * 1.2;
   return col * uNebula;
+}
+
+// ─── Далёкие галактики ──────────────────────────────────────────────────
+// Крупная сетка; в части ячеек — галактика: наклонённый диск (эллипс),
+// логарифмическая спираль рукавов (угол − ln r · закрутка) и яркое ядро.
+// Медленно вращается; лежит в самом дальнем слое (едет медленнее звёзд).
+vec3 galaxies(vec2 p) {
+  if (uGalaxies <= 0.0) return vec3(0.0);
+  vec2 g = p * 2.2;
+  vec2 id = floor(g);
+  vec2 h = hash2(id + 31.0);
+  if (h.x > uGalaxies * 0.7) return vec3(0.0);
+  vec2 c = (hash2(id + 7.0) - 0.5) * 0.5;
+  vec2 q = fract(g) - 0.5 - c;
+  float tilt = 0.25 + h.y * 0.6;                       // наклон диска: эллипс
+  q = rot(hash(id) * 6.28) * q;
+  q.y /= tilt;
+  float size = (0.07 + h.y * 0.08) * uGalaxySize;
+  float r = length(q) / size;
+  if (r > 2.5) return vec3(0.0);
+  float a = atan(q.y, q.x) + uTime * 0.02 * (h.x > 0.3 ? 1.0 : -1.0);
+  float arms = 2.0 + floor(hash(id + 3.0) * 2.0);
+  float spiral = 0.5 + 0.5 * cos(arms * (a - log(r + 0.05) * 2.2));
+  float disk = exp(-r * 1.8);
+  float core = exp(-r * 9.0);
+  vec3 armColor = mix(uGalaxyColor, uNebulaB + 0.3, 0.5);
+  return (armColor * disk * pow(spiral, 2.0) * 0.55 + uGalaxyColor * core * 1.2) * (0.5 + h.y);
 }
 
 // ─── Метеоры ────────────────────────────────────────────────────────────
@@ -290,7 +323,7 @@ void main() {
   float fa = radians(uFlightAngle);
   vec2 fly = vec2(cos(fa), sin(fa)) * t;
 
-  vec3 col = uBackground + nebula(p, m);
+  vec3 col = uBackground + nebula(p, m) + galaxies(p + fly * 0.2 - m * 0.05);
 
   // Три слоя звёзд: дальние мелкие и медленные, ближние крупнее и быстрее.
   float s = 0.0;

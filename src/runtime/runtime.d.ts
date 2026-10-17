@@ -20,7 +20,12 @@ export type PointsParam = {
   enable?: Record<string, string>
 }
 export type TextParam = { type: 'text'; label: string; default: string; maxLength?: number; hint?: string }
-export type Param = NumberParam | ColorParam | BooleanParam | SelectParam | TextParam | PointsParam
+/**
+ * Когда параметр действует: { cycle: ['custom'] } — только если cycle = custom.
+ * В остальных режимах Студия показывает его бледным с пояснением.
+ */
+export type ParamWhen = Record<string, (string | boolean)[]>
+export type Param = (NumberParam | ColorParam | BooleanParam | SelectParam | TextParam | PointsParam) & { when?: ParamWhen }
 export type Params = Record<string, Param>
 export type Values = Record<string, number | string | boolean>
 
