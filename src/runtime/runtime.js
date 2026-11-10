@@ -377,7 +377,7 @@ export function createEffect(canvas, spec, options = {}) {
   let fbo = null
   let fboTexture = null
   // Постобработка пишет непрозрачный кадр — у прозрачного холста её нет.
-  const postEnabled = () => !transparent && opts.post.grain > 0 || opts.post.chroma > 0 || opts.post.vignette > 0 || opts.post.bloom > 0
+  const postEnabled = () => !transparent && (opts.post.grain > 0 || opts.post.chroma > 0 || opts.post.vignette > 0 || opts.post.bloom > 0)
   const ensureFbo = () => {
     fboTexture ??= gl.createTexture()
     gl.bindTexture(gl.TEXTURE_2D, fboTexture)

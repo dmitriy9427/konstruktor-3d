@@ -656,6 +656,50 @@
   letter-spacing: -0.03em;
 }
 
+/* Демо «Свет по рамке»: сетка карточек (сам свет рисует src/runtime/glow.js). */
+.glow-demo {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  width: min(100% - 48px, 760px);
+}
+
+.glow-demo__card {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-height: 130px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface-2);
+}
+
+.glow-demo__card h3 {
+  font-size: 16px;
+}
+
+.glow-demo__card p {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+@media (max-width: 900px) {
+  .glow-demo {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Демо «Шифр»: заголовок по центру (буквы режет src/runtime/scramble.js). */
+.scramble-demo {
+  max-width: calc(100% - 48px);
+  font-family: var(--mono);
+  font-size: clamp(26px, 5vw, 60px);
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  text-align: center;
+}
+
 /* ── Параметры ──────────────────────────────────────────────── */
 .panel {
   grid-area: panel;

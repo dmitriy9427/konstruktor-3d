@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
 import { EFFECTS, effectById } from '../effects'
-import type { SelectParam } from '../runtime/runtime'
-import { DEFAULT_COMMON, changedValues, fromSearch, hslToHex, pathPoints, randomValues, resolveValues, runtimeOptions, sanitize, toSearch } from './params'
+import { uniformName, type SelectParam } from '../runtime/runtime'
+import { DEFAULT_COMMON, changedValues, commonSections, fromSearch, hslToHex, pathPoints, randomValues, resolveValues, runtimeOptions, sanitize, toSearch } from './params'
 
 const lava = effectById('cells')!
 const paramsOf = (id: string) => effectById(id)?.params
@@ -104,6 +104,61 @@ describe('каталог', () => {
         for (const key of Object.keys(preset.values)) expect(effect.params, `${effect.id}/${preset.name}`).toHaveProperty(key)
         expect(resolveValues(effect.params, preset.values), `${effect.id}/${preset.name}`).toMatchObject(preset.values)
       }
+    }
+  })
+})
+
+describe('общие настройки в сайдбаре (commonSections)', () => {
+  const sections = (id: string, values = {}, common = DEFAULT_COMMON) => {
+    const effect = EFFECTS.find((e) => e.id === id)!
+    return commonSections(effect, { ...resolveValues(effect.params), ...values }, common)
+  }
+  const none = { mouse: false, inertia: false, path: false, quality: false, offscreen: false, sleep: false, fps: false, post: false }
+
+  it('фон: всё доступно', () => {
+    expect(sections('noise')).toEqual({ mouse: true, inertia: true, path: true, quality: true, offscreen: true, sleep: true, fps: true, post: true })
+  })
+  it('3D: без постобработки', () => {
+    expect(sections('galaxy')).toMatchObject({ mouse: true, path: true, quality: true, post: false })
+  })
+  it('шейдерный курсор: без выключателя мыши, траектории и постобработки', () => {
+    expect(sections('cursor-fluid')).toMatchObject({ mouse: false, path: false, inertia: true, quality: true, post: false })
+  })
+  it('слайдер: без траектории и паузы; засыпание — только с автопрокруткой', () => {
+    expect(sections('slides')).toMatchObject({ mouse: true, path: false, offscreen: false, sleep: false, fps: true, post: true })
+    expect(sections('slides', { autoplay: 3 }).sleep).toBe(true)
+  })
+  it('эффекты со своим рантаймом: общих настроек нет', () => {
+    for (const id of ['tilt', 'glow', 'scramble', 'cursor-trail', 'liquid-button', 'burn']) expect(sections(id), id).toEqual(none)
+  })
+  it('инерция: мышь выключена — видна, только если задана траектория', () => {
+    expect(sections('noise', {}, { ...DEFAULT_COMMON, mouse: false }).inertia).toBe(false)
+    expect(sections('noise', {}, { ...DEFAULT_COMMON, mouse: false, path: 'circle' }).inertia).toBe(true)
+  })
+})
+
+describe('каталог: в панели нет «мёртвых» настроек', () => {
+  // Параметры, которые читает не шейдер, а рантайм или Студия.
+  const BY_RUNTIME = new Set(['duration', 'autoplay', 'hideCursor'])
+  it('каждый параметр шейдерного эффекта используется в шейдере, when ссылается на существующий параметр', () => {
+    for (const effect of EFFECTS) {
+      const shader = (effect.fragment ?? '') + (effect.simulation?.fragment ?? '')
+      for (const [key, param] of Object.entries(effect.params)) {
+        for (const other of Object.keys(param.when ?? {})) expect(effect.params, `${effect.id}.${key}: when`).toHaveProperty(other)
+        if (!effect.fragment || param.type === 'text' || BY_RUNTIME.has(key)) continue
+        expect(shader, `${effect.id}.${key} не используется в шейдере`).toMatch(new RegExp(`\\b${uniformName(key)}`))
+      }
+    }
+  })
+  it('3D: каждый параметр читается в функции эффекта', () => {
+    for (const effect of EFFECTS.filter((e) => e.kind === 'three')) {
+      for (const key of Object.keys(effect.params)) expect(String(effect.setup), `${effect.id}.${key}`).toMatch(new RegExp(`\\.${key}\\b`))
+    }
+  })
+  it('usesMouse стоит только там, где шейдер читает мышь', () => {
+    for (const effect of EFFECTS.filter((e) => e.fragment)) {
+      const shader = effect.fragment! + (effect.simulation?.fragment ?? '')
+      expect(Boolean(effect.usesMouse), effect.id).toBe(/uMouse|uHover/.test(shader))
     }
   })
 })

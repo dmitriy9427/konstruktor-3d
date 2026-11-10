@@ -6,7 +6,7 @@
  */
 import { useId, useState } from 'react'
 
-import type { Common } from '../engine/params'
+import type { Common, CommonSections } from '../engine/params'
 import { parseList, type ListParam, type Param, type PostOptions, type Values } from '../runtime/runtime'
 import { HintIcon, useHintId, WithHint } from './Hint'
 
@@ -362,30 +362,32 @@ function PathControls({ common, set, drawing, onDraw }: { common: Common; set: (
           <WithHint hint="Кругов за 10 секунд">
             <Range id={`${id}-pspeed`} label="Скорость по пути" min={0.1} max={5} step={0.05} value={common.pathSpeed} onChange={(pathSpeed) => set({ pathSpeed })} />
           </WithHint>
-          <WithHint hint="Только без мыши — когда курсор над эффектом, он главный, а ушёл — точка снова летит по пути. Всегда — мышь не мешает">
-            <Toggle id={`${id}-always`} label="Всегда по пути" checked={common.pathMode === 'always'} onChange={(on) => set({ pathMode: on ? 'always' : 'idle' })} />
-          </WithHint>
+          {/* Мышь выключена — точка и так всегда на пути: переключатель ничего бы не менял. */}
+          {common.mouse && (
+            <WithHint hint="Только без мыши — когда курсор над эффектом, он главный, а ушёл — точка снова летит по пути. Всегда — мышь не мешает">
+              <Toggle id={`${id}-always`} label="Всегда по пути" checked={common.pathMode === 'always'} onChange={(on) => set({ pathMode: on ? 'always' : 'idle' })} />
+            </WithHint>
+          )}
         </>
       )}
     </>
   )
 }
 
-/** Общие настройки: мышь, траектория, качество, экономия, постобработка. */
+/**
+ * Общие настройки: мышь, траектория, качество, экономия, постобработка.
+ * Что показывать, решает commonSections() (engine/params.ts) — здесь только разметка.
+ */
 export function CommonControls({
   common,
   onChange,
-  usesMouse,
-  shader,
-  quality,
+  sections,
   drawingPath = false,
   onDrawPath,
 }: {
   common: Common
   onChange: (c: Common) => void
-  usesMouse: boolean
-  shader: boolean
-  quality: boolean
+  sections: CommonSections
   drawingPath?: boolean
   onDrawPath?: (on: boolean) => void
 }) {
@@ -393,52 +395,59 @@ export function CommonControls({
   const set = (patch: Partial<Common>) => onChange({ ...common, ...patch })
   return (
     <>
-      {usesMouse && (
-        <>
-          <WithHint hint="Выключите, если эффект лежит под формой или текстом и движение за курсором отвлекает">
-            <Toggle id={`${id}-mouse`} label="Следовать за мышью" checked={common.mouse} onChange={(mouse) => set({ mouse })} />
-          </WithHint>
-          {common.mouse && quality && (
-            <WithHint hint="0 — эффект реагирует мгновенно, 0.6 — очень плавно, с запаздыванием">
-              <Range id={`${id}-inertia`} label="Инерция мыши" min={0} max={0.6} step={0.01} value={common.inertia} onChange={(inertia) => set({ inertia })} />
-            </WithHint>
-          )}
-          {quality && <PathControls common={common} set={set} drawing={drawingPath} onDraw={(on) => onDrawPath?.(on)} />}
-        </>
+      {/* ── Мышь ── */}
+      {sections.mouse && (
+        <WithHint hint="Выключите, если эффект лежит под формой или текстом и движение за курсором отвлекает">
+          <Toggle id={`${id}-mouse`} label="Следовать за мышью" checked={common.mouse} onChange={(mouse) => set({ mouse })} />
+        </WithHint>
       )}
-      {quality && (
-        <>
-          <WithHint hint="Потолок плотности пикселей. 1 — как CSS-пиксели, 2 — как ретина. Мягким фонам хватает 1–1.5, а нагрузка падает в разы">
-            <Range id={`${id}-quality`} label="Качество (плотность пикселей)" min={0.5} max={2} step={0.05} value={common.quality} onChange={(quality) => set({ quality })} />
-          </WithHint>
-          <h3 className="panel__subtitle">Экономия</h3>
-          <WithHint hint="Эффект не рисует ни одного кадра, пока его не видно на экране">
-            <Toggle id={`${id}-offscreen`} label="Пауза за экраном" checked={common.offscreen} onChange={(offscreen) => set({ offscreen })} />
-          </WithHint>
-          <WithHint hint="Если пользователь не двигает мышь, не крутит страницу и не нажимает клавиши — анимация замирает. Любое движение будит её. 0 — не засыпать">
-            <Range id={`${id}-sleep`} label="Засыпать без действий, с" min={0} max={60} step={1} value={common.sleep} onChange={(sleep) => set({ sleep })} />
-          </WithHint>
-          <WithHint hint="30 кадров вдвое легче для батареи ноутбука и телефона. Для медленных фонов разницы почти не видно">
-            <fieldset className="control control--segmented">
-              <legend className="control__label">
-                <span>
-                  Кадров в секунду, не больше
-                  <HintIcon />
-                </span>
-              </legend>
-              <div className="segmented">
-                {FPS_OPTIONS.map((o) => (
-                  <label key={o.value} className="segmented__item">
-                    <input type="radio" name={`${id}-fps`} checked={common.fps === o.value} onChange={() => set({ fps: o.value })} />
-                    <span>{o.label}</span>
-                  </label>
-                ))}
-              </div>
-            </fieldset>
-          </WithHint>
-        </>
+      {sections.inertia && (
+        <WithHint hint="0 — эффект реагирует мгновенно, 0.6 — очень плавно, с запаздыванием">
+          <Range id={`${id}-inertia`} label="Инерция мыши" min={0} max={0.6} step={0.01} value={common.inertia} onChange={(inertia) => set({ inertia })} />
+        </WithHint>
       )}
-      {shader && (
+      {/* ── Траектория ── */}
+      {sections.path && <PathControls common={common} set={set} drawing={drawingPath} onDraw={(on) => onDrawPath?.(on)} />}
+      {/* ── Качество ── */}
+      {sections.quality && (
+        <WithHint hint="Потолок плотности пикселей. 1 — как CSS-пиксели, 2 — как ретина. Мягким фонам хватает 1–1.5, а нагрузка падает в разы">
+          <Range id={`${id}-quality`} label="Качество (плотность пикселей)" min={0.5} max={2} step={0.05} value={common.quality} onChange={(quality) => set({ quality })} />
+        </WithHint>
+      )}
+      {/* ── Экономия ── */}
+      {(sections.offscreen || sections.sleep || sections.fps) && <h3 className="panel__subtitle">Экономия</h3>}
+      {sections.offscreen && (
+        <WithHint hint="Эффект не рисует ни одного кадра, пока его не видно на экране">
+          <Toggle id={`${id}-offscreen`} label="Пауза за экраном" checked={common.offscreen} onChange={(offscreen) => set({ offscreen })} />
+        </WithHint>
+      )}
+      {sections.sleep && (
+        <WithHint hint="Если пользователь не двигает мышь, не крутит страницу и не нажимает клавиши — анимация замирает. Любое движение будит её. 0 — не засыпать">
+          <Range id={`${id}-sleep`} label="Засыпать без действий, с" min={0} max={60} step={1} value={common.sleep} onChange={(sleep) => set({ sleep })} />
+        </WithHint>
+      )}
+      {sections.fps && (
+        <WithHint hint="30 кадров вдвое легче для батареи ноутбука и телефона. Для медленных фонов разницы почти не видно">
+          <fieldset className="control control--segmented">
+            <legend className="control__label">
+              <span>
+                Кадров в секунду, не больше
+                <HintIcon />
+              </span>
+            </legend>
+            <div className="segmented">
+              {FPS_OPTIONS.map((o) => (
+                <label key={o.value} className="segmented__item">
+                  <input type="radio" name={`${id}-fps`} checked={common.fps === o.value} onChange={() => set({ fps: o.value })} />
+                  <span>{o.label}</span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        </WithHint>
+      )}
+      {/* ── Постобработка ── */}
+      {sections.post && (
         <>
           <h3 className="panel__subtitle">Постобработка</h3>
           {(Object.keys(POST) as (keyof PostOptions)[]).map((key) => (

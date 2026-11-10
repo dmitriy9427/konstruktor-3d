@@ -2,7 +2,7 @@
  * «Забрать код»: из эффекта и выбранных значений собираем файлы для проекта.
  *
  * Главное: в файл вставляется ТЕКСТ того же рантайма, что рисует превью в
- * Студии (runtime.js / tilt.js). Поэтому экспорт выглядит ровно как превью —
+ * Студии (runtime.js, tilt.js, glow.js…). Поэтому экспорт выглядит ровно как превью —
  * второго, «упрощённого» движка нет.
  *
  * Форматы:
@@ -17,6 +17,12 @@
 import runtimeSource from '../runtime/runtime.js?raw'
 // oxlint-disable-next-line import/default
 import tiltSource from '../runtime/tilt.js?raw'
+// oxlint-disable-next-line import/default
+import glowSource from '../runtime/glow.js?raw'
+// oxlint-disable-next-line import/default
+import scrambleSource from '../runtime/scramble.js?raw'
+// oxlint-disable-next-line import/default
+import blobSource from '../runtime/three/blob.js?raw'
 // oxlint-disable-next-line import/default
 import cursorSource from '../runtime/cursor.js?raw'
 // oxlint-disable-next-line import/default
@@ -167,6 +173,7 @@ ${
 
 /** Текст файлов 3D-эффектов по имени функции (EffectDef.setupName). */
 const SCENE_SOURCES: Record<string, string> = {
+  blob: blobSource,
   galaxy: galaxySource,
   glass: glassSource,
   glassShapes: glassShapesSource,
@@ -291,21 +298,76 @@ export function mount(target = document.body, overrides = {}) {
 `
 }
 
-function tiltModule(effect: EffectDef, values: Values, link?: string) {
-  return `${header(effect, link)}
-${tiltSource.trim()}
+/**
+ * Эффекты на обычном элементе (kind: 'css'): по id — всё, что нужно экспорту.
+ * Новый такой эффект = строка здесь: текст рантайма, имя его функции и пример разметки.
+ */
+type DomEffect = {
+  /** Текст файла из src/runtime/ (уходит в экспорт целиком). */
+  source: string
+  /** Имя функции в нём: createTilt(el, values). */
+  create: string
+  /** Что делает mount() — строка в комментарии экспорта. */
+  about: string
+  /** Селектор и разметка для сниппета подключения. */
+  selector: string
+  markup: (values: Values) => string
+  /** Содержимое веб-компонента <k3d-…> в сниппете. */
+  inner: (values: Values) => string
+  css: string
+}
+const DOM_EFFECTS: Record<string, DomEffect> = {
+  tilt: {
+    source: tiltSource,
+    create: 'createTilt',
+    about: 'Включить наклон на элементе или на всех элементах по селектору.',
+    selector: '.card',
+    markup: () => '<article class="card">…</article>',
+    inner: () => '…',
+    css: '',
+  },
+  glow: {
+    source: glowSource,
+    create: 'createGlow',
+    about: 'Зажечь рамку на элементе или на всех элементах по селектору (обычно — на каждой карточке сетки).',
+    selector: '.glow-card',
+    markup: () => '<div class="cards">\n  <article class="glow-card">…</article>\n  <article class="glow-card">…</article>\n  <article class="glow-card">…</article>\n</div>',
+    inner: () => '…',
+    css: `\n<style>\n  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }\n  /* Карточке нужны свой фон, рамка и скругление: свет повторит её форму. */\n  .glow-card { padding: 24px; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 16px; background: #14141d; color: #fff; }\n</style>\n`,
+  },
+  scramble: {
+    source: scrambleSource,
+    create: 'createScramble',
+    about: 'Включить «шифр» на элементе с текстом или на всех элементах по селектору. У результата есть play() — проиграть заново.',
+    selector: '.scramble',
+    markup: (values) => `<h1 class="scramble">${values.text}</h1>`,
+    inner: (values) => String(values.text),
+    css: '',
+  },
+}
 
-const VALUES = ${json(values)}
+function domModule(effect: EffectDef, values: Values, link?: string) {
+  const dom = DOM_EFFECTS[effect.id]
+  // «Текст (для примера)» живёт в разметке, а не в настройках.
+  const { text: _text, ...rest } = values
+  return `${header(effect, link).replace("mount(document.querySelector('#hero-bg'))", `mount('${dom.selector}')`)}
+${dom.source.trim()}
+
+const VALUES = ${json(rest)}
 
 /**
- * Включить наклон на элементе или на всех элементах по селектору.
+ * ${dom.about}
  * @param {HTMLElement | string} target
  * @param {object} [overrides]
  */
 export function mount(target, overrides = {}) {
   const elements = typeof target === 'string' ? [...document.querySelectorAll(target)] : [target]
-  const items = elements.map((el) => createTilt(el, { ...VALUES, ...overrides }))
-  return { destroy: () => items.forEach((item) => item.destroy()), set: (next) => items.forEach((item) => item.set(next)) }
+  const items = elements.map((el) => ${dom.create}(el, { ...VALUES, ...overrides }))
+  return {
+    destroy: () => items.forEach((item) => item.destroy()),
+    set: (next) => items.forEach((item) => item.set(next)),
+    play: () => items.forEach((item) => item.play?.()),
+  }
 }
 `
 }
@@ -681,24 +743,26 @@ function usageHtml(effect: EffectDef, options: ExportOptions, values: Values) {
   const map = effect.kind === 'three' ? `${importMap()}\n\n` : ''
   const isImage = effect.kind === 'image'
   const isCss = effect.kind === 'css'
+  const dom = isCss ? DOM_EFFECTS[effect.id] : null
   const tag = elementTag(effect)
   if (options.format === 'element') {
-    const inner = isImage ? '\n  <img src="photo.jpg" alt="Описание фото" width="1200" height="800">\n' : ''
+    const inner = isCss ? dom!.inner(values) : isImage ? '\n  <img src="photo.jpg" alt="Описание фото" width="1200" height="800">\n' : ''
+    // Эффект на элементе: сам тег и есть карточка или заголовок — высоту ему не задаём.
     return `${map}<!-- Подключить один раз -->
 <script type="module" src="./effect.js"></script>
 
 <!-- Вставить, где нужен эффект. Размер задаёт CSS. -->
-<${tag}${options.lazy ? ' lazy' : ''} style="height: 100vh">${inner}</${tag}>
+<${tag}${options.lazy ? ' lazy' : ''}${isCss ? '' : ' style="height: 100vh"'}>${inner}</${tag}>
 `
   }
-  const target = isCss
-    ? `<article class="card">…</article>`
+  const target = dom
+    ? dom.markup(values)
     : isImage
       ? `<div id="photo" class="photo">\n  <img src="photo.jpg" alt="Описание фото" width="1200" height="800">\n</div>`
       : `<section id="hero">\n  <div id="hero-bg" class="hero__bg"></div>\n  <h1>Заголовок поверх эффекта</h1>\n</section>`
-  const selector = isCss ? `'.card'` : isImage ? `document.querySelector('#photo')` : `document.querySelector('#hero-bg')`
-  const css = isCss
-    ? ''
+  const selector = dom ? `'${dom.selector}'` : isImage ? `document.querySelector('#photo')` : `document.querySelector('#hero-bg')`
+  const css = dom
+    ? dom.css
     : isImage
       ? `\n<style>\n  .photo { position: relative; overflow: hidden; }\n  .photo img { display: block; width: 100%; height: auto; }\n</style>\n`
       : `\n<style>\n  #hero { position: relative; min-height: 100vh; isolation: isolate; }\n  /* Заглушка, пока эффект не загрузился, — фон того же цвета. */\n  .hero__bg { position: absolute; inset: 0; z-index: -1; background: ${placeholder}; }\n</style>\n`
@@ -977,7 +1041,7 @@ ${loader}
 export function generate(effect: EffectDef, values: Values, common: Common, options: ExportOptions): ExportFile[] {
   const base =
     effect.kind === 'css'
-      ? tiltModule(effect, values, options.link)
+      ? domModule(effect, values, options.link)
       : effect.kind === 'three'
         ? sceneModule(effect, values, common, options.link)
       : effect.kind === 'cursor'

@@ -38,9 +38,10 @@ export const slides: EffectDef = {
       default: 'liquid',
     },
     duration: { type: 'number', label: 'Длительность, с', min: 0.3, max: 3, step: 0.05, default: 1.2, hint: 'Сколько секунд длится смена слайда' },
-    intensity: { type: 'number', label: 'Сила искажения', min: 0, max: 1, step: 0.01, default: 0.5, hint: 'Сила искажения во время перехода' },
-    softness: { type: 'number', label: 'Мягкость края', min: 0.01, max: 0.5, step: 0.01, default: 0.15, hint: 'Мягкость границы между старым и новым слайдом' },
-    scale: { type: 'number', label: 'Масштаб шума', min: 0.5, max: 8, step: 0.1, default: 3, hint: 'Размер узора шума в переходе' },
+    // when — в каких переходах параметр действует: в остальных Студия показывает его бледным.
+    intensity: { type: 'number', when: { mode: ['liquid', 'wipe', 'circle', 'zoom', 'glitch', 'ripple', 'displace', 'blob'] }, label: 'Сила искажения', min: 0, max: 1, step: 0.01, default: 0.5, hint: 'Сила искажения во время перехода' },
+    softness: { type: 'number', when: { mode: ['liquid', 'wipe', 'circle', 'ripple', 'blob'] }, label: 'Мягкость края', min: 0.01, max: 0.5, step: 0.01, default: 0.15, hint: 'Мягкость границы между старым и новым слайдом' },
+    scale: { type: 'number', when: { mode: ['liquid', 'wipe', 'circle', 'displace'] }, label: 'Масштаб шума', min: 0.5, max: 8, step: 0.1, default: 3, hint: 'Размер узора шума в переходе' },
     angle: { type: 'number', when: { mode: ['wipe', 'displace'] }, label: 'Угол шторки, °', min: 0, max: 360, step: 1, default: 20, hint: 'Направление, с которого идёт шторка' },
     edge: { type: 'color', when: { mode: ['wipe', 'circle', 'ripple', 'blob'] }, label: 'Цвет кромки', default: '#ffd27a', hint: 'Цвет светящейся кромки перехода' },
     autoplay: { type: 'number', label: 'Автопрокрутка, с', min: 0, max: 10, step: 0.5, default: 0, hint: '0 — только по кнопкам' },

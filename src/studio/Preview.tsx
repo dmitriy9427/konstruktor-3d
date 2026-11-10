@@ -15,6 +15,8 @@ import { createEffect, type EffectInstance, type Values } from '../runtime/runti
 import { createCursor, type CursorInstance } from '../runtime/cursor'
 import { createLiquidButton, createPreloader, type LiquidButtonInstance, type PreloaderInstance } from '../runtime/ui'
 import type { SceneInstance } from '../runtime/scene'
+import { createGlow, type GlowInstance } from '../runtime/glow'
+import { createScramble, type ScrambleInstance } from '../runtime/scramble'
 import { createTilt, type TiltInstance } from '../runtime/tilt'
 import { createTransition, type TransitionInstance, type TransitionTrigger } from '../runtime/transition'
 
@@ -64,6 +66,9 @@ function DrawLayer({ onPick, path, dots }: { onPick?: (x: number, y: number) => 
 }
 
 export function Preview(props: Props) {
+  // Эффекты на элементе (kind: 'css') — у каждого своя демо-разметка, выбираем по id.
+  if (props.effect.id === 'glow') return <GlowPreview {...props} />
+  if (props.effect.id === 'scramble') return <ScramblePreview key={String(props.values.text)} {...props} />
   if (props.effect.kind === 'css') return <TiltPreview {...props} />
   if (props.effect.kind === 'transition') return <TransitionPreview {...props} />
   if (props.effect.kind === 'slides') return <SlidesPreview key={props.effect.id} {...props} />
@@ -549,6 +554,76 @@ function PreloaderPreview({ values }: Props) {
             instance.current?.replay()
           }}
         >
+          Показать ещё раз
+        </button>
+      </div>
+    </div>
+  )
+}
+
+const GLOW_CARDS = [
+  ['Скорость', 'Свет считает браузер: два градиента и две CSS-переменные.'],
+  ['Соседи', 'Курсор между карточками — светятся рамки обеих.'],
+  ['Форма', 'Свет повторяет скругление карточки.'],
+  ['Клики', 'Слои света не ловят мышь: кнопки внутри работают.'],
+  ['Сотня карточек', 'Без WebGL — хоть на всю сетку товаров.'],
+  ['Тач', 'На телефоне эффект просто выключен.'],
+]
+
+/** «Свет по рамке»: сетка карточек, эффект — на каждой. */
+function GlowPreview({ values }: Props) {
+  const grid = useRef<HTMLDivElement>(null)
+  const instances = useRef<GlowInstance[]>([])
+  const latest = useRef(values)
+  useLayoutEffect(() => {
+    latest.current = values
+  })
+  useEffect(() => {
+    if (!grid.current) return
+    instances.current = [...grid.current.children].map((card) => createGlow(card as HTMLElement, latest.current))
+    return () => instances.current.forEach((i) => i.destroy())
+  }, [])
+  useEffect(() => instances.current.forEach((i) => i.set(values)), [values])
+  return (
+    <div className="preview preview--ui">
+      <div ref={grid} className="glow-demo">
+        {GLOW_CARDS.map(([title, text]) => (
+          <article key={title} className="glow-demo__card">
+            <h3>{title}</h3>
+            <p>{text}</p>
+          </article>
+        ))}
+      </div>
+      <p className="preview__hint">Поводите курсором между карточками</p>
+    </div>
+  )
+}
+
+/**
+ * «Шифр»: заголовок по центру. Рантайм сам режет текст на буквы, поэтому при
+ * новом тексте компонент создаётся заново (key в Preview) — React и рантайм не
+ * спорят за одни и те же узлы.
+ */
+function ScramblePreview({ values }: Props) {
+  const heading = useRef<HTMLHeadingElement>(null)
+  const instance = useRef<ScrambleInstance | null>(null)
+  const latest = useRef(values)
+  useLayoutEffect(() => {
+    latest.current = values
+  })
+  useEffect(() => {
+    if (!heading.current) return
+    instance.current = createScramble(heading.current, latest.current)
+    return () => instance.current?.destroy()
+  }, [])
+  useEffect(() => instance.current?.set(values), [values])
+  return (
+    <div className="preview preview--ui">
+      <h2 ref={heading} className="scramble-demo">
+        {String(values.text)}
+      </h2>
+      <div className="demo__controls">
+        <button type="button" className="button button--primary" onClick={() => instance.current?.play()}>
           Показать ещё раз
         </button>
       </div>

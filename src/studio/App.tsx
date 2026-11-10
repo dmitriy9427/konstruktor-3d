@@ -8,7 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CATEGORIES, EFFECTS, effectById } from '../effects'
 import { decodeCode, encodeCode, makeCustomEffect, parseParams, TEMPLATES } from '../engine/custom'
 import { buildFragment, parseList } from '../runtime/runtime'
-import { DEFAULT_COMMON, fromSearch, pathPoints, randomValues, resolveValues, toSearch, type Common } from '../engine/params'
+import { commonSections, DEFAULT_COMMON, fromSearch, pathPoints, randomValues, resolveValues, toSearch, type Common } from '../engine/params'
 import { mountPerf } from '../engine/perf'
 import type { Values } from '../runtime/runtime'
 import { CodeDrawer } from './CodeDrawer'
@@ -129,9 +129,11 @@ export function App() {
     setTimeout(() => setCopiedLink(false), 1500)
   }
 
-  const shader = effect.kind === 'quad' || effect.kind === 'image' || effect.kind === 'slides'
-  const is3d = effect.kind === 'three'
-  const hasCommon = shader || is3d || Boolean(effect.usesMouse)
+  // Какие общие настройки показывать — решает commonSections (engine/params.ts), не сайдбар.
+  const sections = commonSections(effect, values, common)
+  const hasCommon = Object.values(sections).some(Boolean)
+  // Выбор картинки: эффекты изображения, слайды, карточка «Наклон 3D» и логотип в 3D.
+  const usesImage = effect.kind === 'image' || effect.kind === 'slides' || effect.id === 'tilt' || values.source === 'image'
 
   return (
     <div className={`studio${isCustom ? ' studio--custom' : ''}`}>
@@ -281,7 +283,7 @@ export function App() {
           />
         ))}
 
-        {(effect.kind === 'image' || effect.kind === 'css' || effect.kind === 'slides' || values.source === 'image') && (
+        {usesImage && (
           <div className="demos" role="radiogroup" aria-label="Картинка">
             {DEMOS.map((d) => (
               <button key={d.file} type="button" role="radio" aria-checked={image === d.url} className="demos__item" onClick={() => setImage(d.url)} title={d.name}>
@@ -291,7 +293,7 @@ export function App() {
             ))}
           </div>
         )}
-        {(effect.kind === 'image' || effect.kind === 'css' || effect.kind === 'slides' || values.source === 'image') && (
+        {usesImage && (
           <label className="upload">
             <input
               type="file"
@@ -306,15 +308,7 @@ export function App() {
         )}
 
         {hasCommon && <h3 className="panel__subtitle">Общие</h3>}
-        <CommonControls
-          common={common}
-          onChange={setCommon}
-          usesMouse={effect.usesMouse ?? false}
-          shader={shader && !effect.overlay}
-          quality={shader || is3d}
-          drawingPath={drawing === '_path'}
-          onDrawPath={(on) => setDrawing(on ? '_path' : null)}
-        />
+        <CommonControls common={common} onChange={setCommon} sections={sections} drawingPath={drawing === '_path'} onDrawPath={(on) => setDrawing(on ? '_path' : null)} />
       </aside>
 
       {codeOpen && <CodeDrawer effect={effect} values={values} common={common} link={link} onClose={closeCode} />}

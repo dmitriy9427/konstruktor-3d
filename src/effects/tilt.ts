@@ -11,7 +11,7 @@ export const tilt: EffectDef = {
   category: 'Без WebGL',
   kind: 'css',
   description: 'Карточка наклоняется за курсором, по ней бежит блик',
-  usesMouse: true,
+  // usesMouse не ставим: у наклона свой рантайм (tilt.js), общие настройки он не читает.
   params: {
     max: { type: 'number', label: 'Угол, °', min: 2, max: 30, step: 1, default: 12, hint: 'Максимальный угол наклона карточки в градусах' },
     perspective: { type: 'number', label: 'Перспектива, px', min: 300, max: 2000, step: 10, default: 900, hint: 'Сила перспективы: меньше значение — сильнее «глубина»' },

@@ -3,6 +3,7 @@
  * (его текст уходит в экспорт — см. SCENE_SOURCES в engine/codegen.ts).
  * Здесь — только описание: параметры, пресеты, имя функции. Подробно — docs/12-three.md.
  */
+import { blob as blobSetup } from '../runtime/three/blob.js'
 import { galaxy as galaxySetup } from '../runtime/three/galaxy.js'
 import { glass as glassSetup } from '../runtime/three/glass.js'
 import { glassShapes as glassShapesSetup } from '../runtime/three/glass-shapes.js'
@@ -381,3 +382,47 @@ export const glassShapes: EffectDef = {
 }
 
 export const THREE_EFFECTS = [galaxy, swarm, morph, textParticles, glass, glassShapes]
+
+/**
+ * «Жидкая сфера» — образец описания 3D-эффекта. Сам код — src/runtime/three/blob.js.
+ * Здесь только данные: setup — функция для превью, setupName — её имя, по нему
+ * экспорт берёт текст файла (SCENE_SOURCES в engine/codegen.ts).
+ * Ключи params приходят в функцию как values.amplitude, values.colorA…
+ */
+export const blob: EffectDef = {
+  // ── Паспорт ──
+  id: 'blob',
+  name: 'Жидкая сфера',
+  category: '3D',
+  kind: 'three',
+  description: 'Живая капля с перламутровыми переливами тянется к курсору',
+  usesMouse: true,
+  setup: blobSetup,
+  setupName: 'blob',
+  // ── Ползунки ──
+  params: {
+    speed: { type: 'number', label: 'Скорость', min: 0, max: 3, step: 0.01, default: 1, hint: 'Как быстро капля переливается и вращается' },
+    amplitude: { type: 'number', label: 'Волнение', min: 0, max: 0.7, step: 0.01, default: 0.3, hint: 'Высота бугров: 0 — ровный шар' },
+    scale: { type: 'number', label: 'Мелкость волн', min: 0.4, max: 4, step: 0.01, default: 1.5, hint: 'Меньше — пара крупных бугров, больше — мелкая рябь' },
+    mouse: { type: 'number', label: 'Тянется к курсору', min: 0, max: 0.8, step: 0.01, default: 0.3, hint: 'Высота бугра, который вырастает в сторону курсора' },
+    iridescence: { type: 'number', label: 'Перламутр', min: 0, max: 1, step: 0.01, default: 0.75, hint: 'Сколько радужного перелива поверх основных цветов' },
+    shift: { type: 'number', label: 'Игра цвета', min: 0, max: 4, step: 0.01, default: 1.2, hint: 'Насколько перелив меняется от бугра к впадине' },
+    gloss: { type: 'number', label: 'Глянец', min: 0, max: 1, step: 0.01, default: 0.7, hint: 'Яркость и резкость блика' },
+    rim: { type: 'number', label: 'Контровой свет', min: 0, max: 1.5, step: 0.01, default: 0.6, hint: 'Свечение по краю капли' },
+    glow: { type: 'number', label: 'Ореол', min: 0, max: 1.5, step: 0.01, default: 0.45, hint: 'Мягкое пятно света за каплей' },
+    detail: { type: 'number', label: 'Детализация', min: 8, max: 80, step: 1, default: 48, hint: 'Число треугольников: меньше — легче для видеокарты, но видны грани' },
+    zoom: { type: 'number', label: 'Приближение', min: 0.5, max: 2, step: 0.01, default: 1 },
+    colorA: { type: 'color', label: 'Впадины', default: '#3a1c8f' },
+    colorB: { type: 'color', label: 'Бугры', default: '#ff5fa8' },
+    colorC: { type: 'color', label: 'Свет по краю', default: '#5ad7ff' },
+    background: { type: 'color', label: 'Фон', default: '#06050d' },
+  },
+  // ── Пресеты ──
+  presets: [
+    { name: 'Перламутр', values: {} },
+    { name: 'Лава', values: { colorA: '#3d0500', colorB: '#ff7a1a', colorC: '#ffd166', background: '#0a0302', iridescence: 0.15, amplitude: 0.42, scale: 2.1, speed: 0.6, gloss: 0.4 } },
+    { name: 'Ртуть', values: { colorA: '#1b1e26', colorB: '#dfe6f0', colorC: '#ffffff', background: '#08090c', iridescence: 0.1, gloss: 1, rim: 0.9, amplitude: 0.22, scale: 1.1 } },
+    { name: 'Мята', values: { colorA: '#053b3a', colorB: '#7dffb8', colorC: '#eaffd0', background: '#020b0a', iridescence: 0.5, shift: 2.4, scale: 2.6, amplitude: 0.18 } },
+    { name: 'Мыльный пузырь', values: { colorA: '#10131f', colorB: '#262c44', colorC: '#b9a6ff', iridescence: 1, shift: 3.2, amplitude: 0.12, scale: 0.8, gloss: 0.95, glow: 0.8 } },
+  ],
+}

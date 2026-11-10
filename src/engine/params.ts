@@ -65,6 +65,61 @@ export const runtimeOptions = (c: Common) => ({
       : { points: pathPoints(c), closed: c.path === 'wave' ? false : c.path === 'custom' ? c.pathClosed : true, speed: c.pathSpeed, mode: c.pathMode },
 })
 
+// ─── Какие общие настройки показывать ───────────────────────────────────────
+// Сайдбар Студии не решает это сам: он спрашивает commonSections(). Правило одно —
+// настройка видна, только если рантайм этого эффекта её ЧИТАЕТ и она что-то меняет.
+// Новый вид эффекта (kind) → допишите ветку здесь, а не условие в Controls.tsx.
+
+/** Что из общих настроек имеет смысл для эффекта (остальное в сайдбаре скрыто). */
+export type CommonSections = {
+  /** Переключатель «Следовать за мышью». */
+  mouse: boolean
+  /** Ползунок «Инерция мыши». */
+  inertia: boolean
+  /** Блок «Траектория». */
+  path: boolean
+  /** «Качество (плотность пикселей)». */
+  quality: boolean
+  /** «Пауза за экраном». */
+  offscreen: boolean
+  /** «Засыпать без действий». */
+  sleep: boolean
+  /** «Кадров в секунду, не больше». */
+  fps: boolean
+  /** Блок «Постобработка». */
+  post: boolean
+}
+
+/** Минимум сведений об эффекте, нужный для решения (EffectDef подходит целиком). */
+type SectionsEffect = { kind: string; usesMouse?: boolean; overlay?: boolean; hoverSwap?: boolean }
+
+export function commonSections(effect: SectionsEffect, values: Values, common: Pick<Common, 'mouse' | 'path'>): CommonSections {
+  const slides = effect.kind === 'slides'
+  // Общие настройки читают только runtime.js (quad, image, slides) и scene.js (three).
+  // У курсоров, интерфейса, переходов и CSS-эффектов свои рантаймы — им общие не нужны.
+  const shader = effect.kind === 'quad' || effect.kind === 'image' || slides
+  const canvas = shader || effect.kind === 'three'
+  const pointer = canvas && Boolean(effect.usesMouse)
+  // Шейдерный курсор (overlay) без мыши — не курсор: выключатель и траектория ему не нужны.
+  const mouse = pointer && !effect.overlay
+  // Слайдер рисует кадры только во время перехода — точка по траектории не полетит.
+  const path = mouse && !slides
+  return {
+    mouse,
+    path,
+    // Инерция сглаживает и мышь, и полёт по траектории.
+    inertia: pointer && (Boolean(effect.overlay) || common.mouse || (path && common.path !== 'none')),
+    quality: canvas,
+    // Слайдер и так стоит между переходами, а автопрокрутка сама ждёт, пока он на экране.
+    offscreen: canvas && !slides,
+    // Слайдеру засыпать есть смысл только с автопрокруткой.
+    sleep: canvas && (!slides || (!effect.hoverSwap && Number(values.autoplay) > 0)),
+    fps: canvas,
+    // Постобработка пишет непрозрачный кадр: у прозрачного холста курсора и у three её нет.
+    post: shader && !effect.overlay,
+  }
+}
+
 export const DEFAULT_COMMON: Common = {
   mouse: true,
   inertia: 0.12,
